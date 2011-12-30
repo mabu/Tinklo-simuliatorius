@@ -1,0 +1,219 @@
+/**
+ * Laidas.
+ * Informacijos tarp mazgų perdavimo terpė. Ja gali naudotis 2 ar daugiau mazgų.
+ */
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <cerrno>
+#include <csignal>
+#include <map>
+#include <unordered_map>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+using namespace std;
+
+fd_set gFdSet; // aibė UNIX lizdų kiekvienam mazgui
+map<int, string> gSocketToName;
+unordered_map<string, int> gNameToSocket;
+
+/**
+ * Uždaro visus atidarytus lizdus ir nutraukia programos darbą.
+ *
+ * @param sig signalo numeris, jei jis įvyko
+ */
+void close_and_exit(int sig)
+{
+  printf("Išsijunginėja...\n");
+  for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+  {
+    printf("Atjungia %s\n", (*it).second.c_str());
+    if (-1 == close((*it).first)) perror("Klaida uždarant lizdą");
+  }
+  printf("Baigta.\n");
+  exit(!sig);
+}
+
+/**
+ * Prijungia nurodytą mazgą.
+ *
+ * @param node mazgo pavadinimas, koks buvo nurodytas sukuriant mazgą
+ * @return true, jei prijungimas pavyksta; false, priešingu atveju
+ */
+bool connect_node(char* node)
+{
+  int nodeSocket = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (nodeSocket == -1) return false;
+  sockaddr_un addr;
+  addr.sun_family = AF_UNIX;
+  strcpy(addr.sun_path, node);
+  if (connect(nodeSocket, (sockaddr*)&addr,
+      strlen(addr.sun_path) + sizeof(addr.sun_family)) == -1)
+  {
+    close(nodeSocket);
+    return false;
+  }
+  gSocketToName.insert(make_pair(nodeSocket, string(node)));
+  gNameToSocket.insert(make_pair(string(node), nodeSocket));
+  FD_SET(nodeSocket, &gFdSet);
+  return true;
+}
+
+/**
+ * Atjungia nurodytą mazgą.
+ *
+ * @param node mazgo pavadinimas, koks buvo nurodytas prijungiant mazgą
+ * @return true, jei atjungimas pavyksta; false, priešingu atveju
+ */
+bool disconnect_node(const char* node)
+{
+  auto it = gNameToSocket.find(string(node));
+  if (it == gNameToSocket.end()) return false;
+  int nodeSocket = it->second;
+  gSocketToName.erase(nodeSocket);
+  gNameToSocket.erase(it);
+  FD_CLR(nodeSocket, &gFdSet);
+  return close(nodeSocket) == 0;
+}
+
+int main(int argc, char* argv[])
+{
+  // gaudom signalus gražiam išsijungimui
+  struct sigaction sa;
+  sa.sa_handler = close_and_exit;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(SIGINT, &sa, NULL) == -1)
+  {
+    perror("sigaction SIGINT");
+    return 1;
+  }
+  if (sigaction(SIGTERM, &sa, NULL) == -1)
+  {
+    perror("sigaction SIGTERM");
+    return 1;
+  }
+
+  FD_ZERO(&gFdSet);
+  FD_SET(0, &gFdSet); // stdin
+
+  // prijungiam mazgus, perduotus parametrais
+  for (int i = 1; i < argc; i++)
+  {
+    if (gNameToSocket.find(string(argv[i])) != gNameToSocket.end())
+    {
+      printf("Prie mazgo %s jau buvo prisijungta.\n", argv[i]);
+      continue;
+    }
+    printf("Jungiamasi prie mazgo %s", argv[i]);
+    if (false == connect_node(argv[i]))
+    {
+      perror("Nepavyko prisijungti prie mazgo");
+    }
+  }
+
+  printf("Norėdami prijungti ar atjungti mazgą, įrašykite jo pavadinimą. Norėdami gauti prijungtų mazgų sąrašą, spauskite „Įvesti“.\n");
+
+  while (1)
+  {
+    fd_set tempFdSet = gFdSet;
+    int moreThanMaxSocket;
+    if (gSocketToName.empty()) moreThanMaxSocket = 1;
+    else moreThanMaxSocket = gSocketToName.rbegin()->first + 1;
+    if (select(moreThanMaxSocket, &tempFdSet, NULL, NULL, NULL) <= 0)
+    {
+      perror("select");
+      close_and_exit(0);
+    }
+
+    // paimame siunčiamus signalus
+    char valueToSend = 0;
+    int sender = 0;
+    for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+    {
+      if (FD_ISSET(it->first, &tempFdSet))
+      {
+        if (sender == 0) sender = it->first;
+        else sender = -1;
+        char volts;
+        if (0 == recv(it->first, &volts, 1, 0))
+        {
+          printf("Atsijungė mazgas %s\n", it->second.c_str());
+          if (!disconnect_node(it->second.c_str()))
+          {
+            perror("Klaida užbaigiant ryšį");
+          }
+        }
+        else
+        {
+          valueToSend += volts;
+        }
+      }
+    }
+
+    // siunčiame
+    if (sender != 0)
+    {
+      if (sender == -1) printf("Kolizija.\n");
+      printf("Siunčiama reikšmė: %hhd\n", valueToSend);
+      for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+      {
+        if (it->first != sender)
+        {
+          if (send(it->first, &valueToSend, 1, 0) != 1)
+          {
+            if (errno == ECONNRESET)
+            {
+              printf("Besiunčiant atsijungė mazgas %s\n", it->second.c_str());
+              if (!disconnect_node(it->second.c_str()))
+              {
+                perror("Klaida užbaigiant ryšį");
+              }
+            } else {
+              perror("Klaida siunčiant");
+              printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
+            }
+          }
+        }
+      }
+    }
+
+    // prijungimas/atjungimas
+    char name[FILENAME_MAX];
+    if (FD_ISSET(0, &tempFdSet))
+    {
+      if (NULL != fgets(name, FILENAME_MAX, stdin))
+      {
+        int len = strlen(name);
+        if (name[len - 1] == '\n') name[len - 1] = '\0';
+        if (name[0] == '\0')
+        {
+          for (auto it = gNameToSocket.begin(); it != gNameToSocket.end(); it++)
+          {
+            printf("%s\n", it->first.c_str());
+          }
+        }
+        else
+        {
+          if (gNameToSocket.find(string(name)) == gNameToSocket.end())
+          {
+            printf("Prijungiame %s\n", name);
+            if (connect_node(name)) printf("Prijungta.\n");
+            else perror("Prijungti nepavyko");
+          }
+          else
+          {
+            printf("Atjungiame %s\n", name);
+            if (disconnect_node(name)) printf("Atjungta.\n");
+            else perror("Klaida atjungiant");
+          }
+        }
+      }
+    }
+  }
+
+  return 0;
+}
