@@ -9,7 +9,6 @@
 #include <cstring>
 #include <string>
 #include <cerrno>
-#include <csignal>
 #include <map>
 #include <unordered_map>
 #include <unistd.h>
@@ -18,6 +17,8 @@
 #include <sys/un.h>
 
 #include "common.h"
+
+#define CHEAT "siųsk " // parašius po šito vieną simbolį, jį išsiunčia laidu
 
 using namespace std;
 
@@ -30,7 +31,7 @@ unordered_map<string, int> gNameToSocket;
  *
  * @param sig signalo numeris, jei jis įvyko
  */
-void close_and_exit(int sig)
+void close_and_exit(int sig = 0)
 {
   printf("Išsijunginėja...\n");
   for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
@@ -38,7 +39,6 @@ void close_and_exit(int sig)
     printf("Atjungia %s\n", (*it).second.c_str());
     if (-1 == close((*it).first)) perror("Klaida uždarant lizdą");
   }
-  printf("Baigta.\n");
   exit(!sig);
 }
 
@@ -84,6 +84,31 @@ bool disconnect_node(const char* node)
   return close(nodeSocket) == 0;
 }
 
+void send_signal(int sender, char valueToSend)
+{
+  printf("Siunčiama reikšmė: %hhd\n", valueToSend);
+  for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+  {
+    if (it->first != sender)
+    {
+      if (send(it->first, &valueToSend, 1, MSG_NOSIGNAL) != 1)
+      {
+        if (errno == ECONNRESET || errno == EPIPE)
+        {
+          printf("Besiunčiant atsijungė mazgas %s\n", it->second.c_str());
+          if (!disconnect_node(it->second.c_str()))
+          {
+            perror("Klaida užbaigiant ryšį");
+          }
+        } else {
+          perror("Klaida siunčiant");
+          printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
+        }
+      }
+    }
+  }
+}
+
 int main(int argc, char* argv[])
 {
   // gaudom signalus gražiam išsijungimui
@@ -122,7 +147,7 @@ int main(int argc, char* argv[])
     if (select(moreThanMaxSocket, &tempFdSet, NULL, NULL, NULL) <= 0)
     {
       perror("select");
-      close_and_exit(0);
+      close_and_exit();
     }
 
     // paimame siunčiamus signalus
@@ -138,6 +163,7 @@ int main(int argc, char* argv[])
         if (0 == recv(it->first, &volts, 1, 0))
         {
           printf("Atsijungė mazgas %s\n", it->second.c_str());
+          if (sender > 0) sender = 0;
           if (!disconnect_node(it->second.c_str()))
           {
             perror("Klaida užbaigiant ryšį");
@@ -154,27 +180,7 @@ int main(int argc, char* argv[])
     if (sender != 0)
     {
       if (sender == -1) printf("Kolizija.\n");
-      printf("Siunčiama reikšmė: %hhd\n", valueToSend);
-      for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
-      {
-        if (it->first != sender)
-        {
-          if (send(it->first, &valueToSend, 1, 0) != 1)
-          {
-            if (errno == ECONNRESET)
-            {
-              printf("Besiunčiant atsijungė mazgas %s\n", it->second.c_str());
-              if (!disconnect_node(it->second.c_str()))
-              {
-                perror("Klaida užbaigiant ryšį");
-              }
-            } else {
-              perror("Klaida siunčiant");
-              printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
-            }
-          }
-        }
-      }
+      send_signal(sender, valueToSend);
     }
 
     // prijungimas/atjungimas
@@ -184,6 +190,10 @@ int main(int argc, char* argv[])
       if (NULL != fgets(name, FILENAME_MAX, stdin))
       {
         int len = strlen(name);
+        if (len == sizeof(CHEAT) + 1  && strncmp(name, CHEAT, sizeof(CHEAT)))
+        {
+          send_signal(0, name[sizeof(CHEAT)]);
+        }
         if (name[len - 1] == '\n') name[len - 1] = '\0';
         if (name[0] == '\0')
         {

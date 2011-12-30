@@ -13,5 +13,6 @@ bool set_signals_handler(void(*handler)(int))
   sigemptyset(&sa.sa_mask);
   if (sigaction(SIGINT,  &sa, NULL) == -1) return false;
   if (sigaction(SIGTERM, &sa, NULL) == -1) return false;
+  if (sigaction(SIGSEGV, &sa, NULL) == -1) return false;
   return true;
 }

@@ -1,19 +1,28 @@
-FLAGS = -std=c++0x -Wall
+FLAGS=-std=c++0x -Wall -O2
+SOURCES=common.cpp         \
+        Layer.cpp          \
+        LinkLayer.cpp      \
+        MacSublayer.cpp    \
+        NetworkLayer.cpp   \
+        Node.cpp           \
+        TransportLayer.cpp \
+
+OBJECTS=$(SOURCES:.cpp=.o)
+HEADERS=$(SOURCES:.cpp=.h)
 
 all: wire node
 
-common.o: common.h common.cpp
-	g++ -c $(FLAGS) common.cpp
-
 wire: wire.o common.o
 	g++ -o wire $(FLAGS) wire.o common.o
+
 wire.o: wire.cpp common.o
 	g++ -c $(FLAGS) wire.cpp
 
-node: node.o common.o
-	g++ -o node $(FLAGS) node.o common.o
-node.o:
-	g++ -c $(FLAGS) node.cpp
+node: $(OBJECTS) node.cpp
+	g++ -o node $(FLAGS) node.cpp $(OBJECTS)
+
+%.o: %.cpp $(HEADERS)
+	g++ -c $(FLAGS) $*.cpp
 
 clean:
 	rm wire node *.o
