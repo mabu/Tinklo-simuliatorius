@@ -1,6 +1,8 @@
 /**
  * Laidas.
  * Informacijos tarp mazgų perdavimo terpė. Ja gali naudotis 2 ar daugiau mazgų.
+ * Laidą įkišti į mazgą galima interaktyviai arba per paleidimo argumentus
+ * nurodant mazgų pavadinimus.
  */
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +16,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+
+#include "common.h"
+
 using namespace std;
 
 fd_set gFdSet; // aibė UNIX lizdų kiekvienam mazgui
@@ -82,18 +87,9 @@ bool disconnect_node(const char* node)
 int main(int argc, char* argv[])
 {
   // gaudom signalus gražiam išsijungimui
-  struct sigaction sa;
-  sa.sa_handler = close_and_exit;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
-  if (sigaction(SIGINT, &sa, NULL) == -1)
+  if (false == set_signals_handler(close_and_exit))
   {
-    perror("sigaction SIGINT");
-    return 1;
-  }
-  if (sigaction(SIGTERM, &sa, NULL) == -1)
-  {
-    perror("sigaction SIGTERM");
+    perror("Nepavyko nustatyti signalų apdorojimo funkcijos");
     return 1;
   }
 
