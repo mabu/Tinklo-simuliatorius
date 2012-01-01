@@ -1,4 +1,4 @@
-FLAGS=-std=c++0x -Wall -O2
+FLAGS=-std=c++0x -Wall -g
 SOURCES=common.cpp         \
         Layer.cpp          \
         LinkLayer.cpp      \
@@ -8,7 +8,7 @@ SOURCES=common.cpp         \
         TransportLayer.cpp \
 
 OBJECTS=$(SOURCES:.cpp=.o)
-HEADERS=$(SOURCES:.cpp=.h)
+HEADERS=$(SOURCES:.cpp=.h) types.h
 
 all: wire node
 

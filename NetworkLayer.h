@@ -16,6 +16,7 @@ class NetworkLayer: public Layer
 
   public:
     NetworkLayer(Node* pNode);
+    void timer(); // žr. Layer.h
     void addLink(LinkLayer* pLinkLayer);
     void removeLink(LinkLayer* pLinkLayer);
 };

@@ -41,7 +41,7 @@ int      gAppSocket;                    // lizdas programoms jungtis prie
 
 void destroy_and_exit(int sig = 0)
 {
-  printf("Išsijunginėja...\n");
+  printf("Išsijunginėja... (%d)\n", sig);
   if (0 != gWireSocket)
   {
     if (-1 == close(gWireSocket)) perror("Klaida atjungiant laidų lizdą");
@@ -99,7 +99,7 @@ MacAddress parse_mac_address(char* macStr)
     else break;
 
     if (HEXS_IN_MAC_ADDRESS < ++symbolsFound) break;
-    else macAddress <<= 4;
+    else if (symbolsFound != HEXS_IN_MAC_ADDRESS) macAddress <<= 4;
   }
   if (HEXS_IN_MAC_ADDRESS != symbolsFound) return -1;
   return macAddress;

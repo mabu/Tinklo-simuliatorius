@@ -6,6 +6,10 @@ NetworkLayer::NetworkLayer(Node* pNode):
   Layer(pNode)
 { }
 
+void NetworkLayer::timer()
+{
+}
+
 void NetworkLayer::addLink(LinkLayer* pLinkLayer)
 {
   links.insert(pLinkLayer);

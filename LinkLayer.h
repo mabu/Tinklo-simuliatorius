@@ -16,6 +16,7 @@ class LinkLayer: public Layer
 
   public:
     LinkLayer(Node* pNode, MacSublayer* pMacSublayer);
+    void timer(); // žr. Layer.h
 };
 
 #endif

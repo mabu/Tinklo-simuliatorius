@@ -2,15 +2,15 @@
 #define NODE_H
 
 #include <cstdarg>
+#include <ctime>
+#include <vector>
 #include <map>
 #include <unordered_map>
 #include <sys/select.h>
+#include "types.h"
 #include "MacSublayer.h"
 #include "NetworkLayer.h"
 #include "TransportLayer.h"
-
-typedef unsigned  IpAddress;
-typedef long long MacAddress;
 
 class LinkLayer;
 
@@ -29,6 +29,7 @@ class Node
     std::unordered_map<int, int>                 mAppToSocket;
     std::unordered_map<MacSublayer*, LinkLayer*> mMacToLink;
     fd_set                                       mFdSet;
+    std::vector<std::pair<clock_t, Layer*> >     mTimers;
 
   public:
     Node(int wireSocket, int appSocket, MacAddress macAddress,
@@ -42,6 +43,15 @@ class Node
      * @param vl     argumentai
      */
     void       layerMessage(const char* format, va_list vl);
+
+    /**
+     * Paleidžia laikmatį.
+     * Praėjus milliseconds milisekundžių įvykdo layer->timer().
+     *
+     * @param layer        tinklo lygio esybė, kuriai taikomas laikmatis
+     * @param milliseconds už kelių milisekundžių laikmatis turi baigtis
+     */
+    void       startTimer(Layer* layer, int milliseconds);
 
     IpAddress  ipAddress();
     MacAddress macAddress();
@@ -60,6 +70,9 @@ class Node
      */
     void toPhysicalLayer(MacSublayer* pMacSublayer, char voltage);
 
+    void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
+                     Byte* frame, FrameLength length);
+
   private:
     /**
      * Atjungia nuo laido.
@@ -68,6 +81,8 @@ class Node
      * @param pMacSublayer rodyklė į MAC polygį, susietą su laidu
      */
     void removeLink(int wireSocket, MacSublayer* pMacSublayer);
+
+    void sendRandomFrames(MacSublayer* pMacSublayer); // testavimui
 };
 
 #endif

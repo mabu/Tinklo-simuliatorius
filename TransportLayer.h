@@ -11,6 +11,7 @@ class TransportLayer: public Layer
 {
   public:
     TransportLayer(Node* pNode);
+    void timer(); // žr. Layer.h
 };
 
 #endif

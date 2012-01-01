@@ -4,3 +4,7 @@
 TransportLayer::TransportLayer(Node* pNode):
   Layer(pNode)
 { }
+
+void TransportLayer::timer()
+{
+}

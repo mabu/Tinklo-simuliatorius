@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#define MILLION 1000000
+
 Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
            IpAddress ipAddress):
   mWireSocket(wireSocket),
@@ -39,6 +41,15 @@ void Node::layerMessage(const char* format, va_list vl)
   vprintf(format, vl);
 }
 
+void Node::startTimer(Layer* layer, int milliseconds)
+{
+  mTimers.push_back(std::make_pair(clock() + milliseconds * (CLOCKS_PER_SEC
+                                                            / 1000.0), layer));
+  std::push_heap(mTimers.begin(), mTimers.end());
+  //printf("Pradėtas skaičiuoti %dms laikas. Dabar eilėje %lu.\n", milliseconds,
+  //       mTimers.size());
+}
+
 IpAddress Node::ipAddress()
 {
   return mIpAddress;
@@ -51,7 +62,6 @@ MacAddress Node::macAddress()
 
 void Node::run()
 {
-
   while (1)
   {
     int moreThanMaxSocket = std::max(mWireSocket, mAppSocket) + 1;
@@ -66,7 +76,25 @@ void Node::run()
                               mSocketToApp.rbegin()->first + 1);
     }
     fd_set tempFdSet = mFdSet;
-    if (select(moreThanMaxSocket, &tempFdSet, NULL, NULL, NULL) <= 0)
+    timeval tv;
+    if (!mTimers.empty())
+    {
+      clock_t current = clock();
+      if (current > mTimers.front().first)
+      {
+        clock_t microsecondsLeft = (mTimers.front().first - current)
+                                   / (CLOCKS_PER_SEC / (double) MILLION);
+        tv.tv_sec = microsecondsLeft / MILLION;
+        tv.tv_usec = microsecondsLeft % MILLION;
+      }
+      else
+      {
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+      }
+    }
+    if (select(moreThanMaxSocket, &tempFdSet, NULL, NULL, (mTimers.empty() ?
+                                                           NULL : &tv)) < 0)
     {
       perror("select");
       break;
@@ -104,20 +132,36 @@ void Node::run()
       mMacSublayerToSocket.insert(std::make_pair(pMacSublayer, wireSocket));
       mNetworkLayer.addLink(pLinkLayer);
       FD_SET(wireSocket,  &mFdSet);
+      sendRandomFrames(pMacSublayer);
     }
 //    if (FD_ISSET(mAppSocket,  &tempFdSet))
+
+    while (!mTimers.empty() && mTimers.front().first <= clock())
+    {
+      Layer* pLayer = mTimers.front().second;
+      std::pop_heap(mTimers.begin(), mTimers.end());
+      mTimers.pop_back();
+      //printf("Baigtas skaičiuoti laikas. Dabar eilėje %u.\n", mTimers.size());
+      pLayer->timer();
+    }
   }
 }
 
 void Node::toPhysicalLayer(MacSublayer* pMacSublayer, char voltage)
 {
-  printf("Siunčia signalą %hhd\n", voltage);
+  //printf("Siunčia signalą %hhd\n", voltage);
   int wireSocket = mMacSublayerToSocket.find(pMacSublayer)->second;
   if (1 != send(wireSocket, &voltage, 1, MSG_NOSIGNAL))
   {
     perror("Nepavyko išsiųsti signalo");
     removeLink(wireSocket, pMacSublayer);
   }
+}
+
+void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
+                       Byte* frame, FrameLength length)
+{
+  // TODO
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
@@ -128,8 +172,16 @@ void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
   mNetworkLayer.removeLink(it->second);
   mMacSublayerToSocket.erase(pMacSublayer);
   mSocketToMacSublayer.erase(wireSocket);
-  delete pMacSublayer;
+  pMacSublayer->selfDestruct();
   delete it->second;
   mMacToLink.erase(it);
   FD_CLR(wireSocket,  &mFdSet);
+}
+
+void Node::sendRandomFrames(MacSublayer* pMacSublayer)
+{
+  pMacSublayer->fromLinkLayer(BROADCAST_MAC, NULL, 0);
+  int foo;
+  pMacSublayer->fromLinkLayer(0xaa004499bb32, (Byte*)&foo, 3);
+  pMacSublayer->fromLinkLayer(0x003344221122, (Byte*)&foo, 2);
 }
