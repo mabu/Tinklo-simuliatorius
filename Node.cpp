@@ -132,7 +132,7 @@ void Node::run()
       mMacSublayerToSocket.insert(std::make_pair(pMacSublayer, wireSocket));
       mNetworkLayer.addLink(pLinkLayer);
       FD_SET(wireSocket,  &mFdSet);
-      sendRandomFrames(pMacSublayer);
+      //sendRandomFrames(pMacSublayer);
     }
 //    if (FD_ISSET(mAppSocket,  &tempFdSet))
 
@@ -159,9 +159,9 @@ void Node::toPhysicalLayer(MacSublayer* pMacSublayer, char voltage)
 }
 
 void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
-                       Byte* frame, FrameLength length)
+                       Frame& frame)
 {
-  // TODO
+  mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, frame);
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
@@ -180,8 +180,10 @@ void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
 
 void Node::sendRandomFrames(MacSublayer* pMacSublayer)
 {
-  pMacSublayer->fromLinkLayer(BROADCAST_MAC, NULL, 0);
-  int foo;
-  pMacSublayer->fromLinkLayer(0xaa004499bb32, (Byte*)&foo, 3);
-  pMacSublayer->fromLinkLayer(0x003344221122, (Byte*)&foo, 2);
+  Frame fr0(0);
+  Frame fr2(2);
+  Frame fr3(3);
+  pMacSublayer->fromLinkLayer(BROADCAST_MAC, fr0);
+  pMacSublayer->fromLinkLayer(0xaa004499bb32, fr3);
+  pMacSublayer->fromLinkLayer(0x003344221122, fr2);
 }

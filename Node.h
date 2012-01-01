@@ -71,7 +71,7 @@ class Node
     void toPhysicalLayer(MacSublayer* pMacSublayer, char voltage);
 
     void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
-                     Byte* frame, FrameLength length);
+                     Frame& frame);
 
   private:
     /**

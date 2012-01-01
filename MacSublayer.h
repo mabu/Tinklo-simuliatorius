@@ -4,6 +4,7 @@
 #include <vector>
 #include "types.h"
 #include "Layer.h"
+#include "Frame.h"
 
 #define MAX_DATA_LENGTH      1500 // didžiausias kadro duomenų dalies ilgis
 #define MIN_DATA_LENGTH (FrameLength)46 // mažiausias kadro duomenų dalies ilgis
@@ -66,7 +67,7 @@ class MacSublayer: public Layer
      * @return true, jei pavyko išsiųsti, false – priešingu atveju (pavyzdžiui,
      *         tuo metu laidas buvo naudojamas ir norėta išvengti kolizijos)
      */
-    bool fromLinkLayer(MacAddress destination, Byte* frame, FrameLength length);
+    bool fromLinkLayer(MacAddress destination, Frame& frame);
 
     /**
      * Bando pakartotinai siųsti vėliausiai supakuotą kadrą.

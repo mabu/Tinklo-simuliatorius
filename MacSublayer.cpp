@@ -8,7 +8,14 @@
                               + CHECKSUM_LENGTH
 
 MacSublayer::MacSublayer(Node* pNode):
-  Layer(pNode)
+  Layer(pNode),
+  mConsequentOnes(0),
+  mLastVoltage(0),
+  mPreambleBits(0),
+  mTimersRunning(0),
+  mReceivingData(false),
+  mJustArrived(false),
+  mIsZombie(false)
 { }
 
 void MacSublayer::fromPhysicalLayer(char voltage)
@@ -64,18 +71,18 @@ void MacSublayer::fromPhysicalLayer(char voltage)
       source = (source << 1) + !!mInputBuffer[i];
     }
     info("Gavo %hu ilgio paketą nuo %llx.\n", mLength, source);
-    Byte* frame = new Byte[mLength];
+    Frame frame(mLength);
     for (int i = 0; i < mLength; i++)
     {
-      frame[i] = 0;
+      frame.data[i] = 0;
       for (int j = 0; j < 8; j++)
       {
-        frame[i] = (frame[i] << 1) + !!mInputBuffer[FRAME_START + i * 8 + j];
+        frame.data[i] = (frame.data[i] << 1) + !!mInputBuffer[FRAME_START
+                                                              + i * 8 + j];
       }
     }
     mInputBuffer.clear();
-    mpNode->toLinkLayer(this, source, frame, mLength);
-    delete frame;
+    mpNode->toLinkLayer(this, source, frame);
   }
   else
   {
@@ -85,24 +92,23 @@ void MacSublayer::fromPhysicalLayer(char voltage)
   }
 }
 
-bool MacSublayer::fromLinkLayer(MacAddress destination, Byte* data,
-                                FrameLength length)
+bool MacSublayer::fromLinkLayer(MacAddress destination, Frame& frame)
 {
-  if (length > MAX_DATA_LENGTH)
+  if (frame.length > MAX_DATA_LENGTH)
   {
-    info("Nori siųsti per ilgą paketą (ilgis %hu > %d).\n", length,
+    info("Nori siųsti per ilgą paketą (ilgis %hu > %d).\n", frame.length,
          MAX_DATA_LENGTH);
     return false;
   }
-  info("Siunčia %hu ilgio paketą į %llx.\n", length, destination);
+  info("Siunčia %hu ilgio paketą į %llx.\n", frame.length, destination);
   mOutputBuffer.clear();
   mConsequentOnes = 0;
   bufferAddresss(destination);
   bufferAddresss(mpNode->macAddress());
-  bufferByte((length >> 8) & 0xff);
-  bufferByte(length & 0xff);
-  for (FrameLength i = 0; i < length; i++) bufferByte(data[i]);
-  for (FrameLength i = length; i < MIN_DATA_LENGTH; i++) bufferByte(0);
+  bufferByte((frame.length >> 8) & 0xff);
+  bufferByte(frame.length & 0xff);
+  for (FrameLength i = 0; i < frame.length; i++) bufferByte(frame.data[i]);
+  for (FrameLength i = frame.length; i < MIN_DATA_LENGTH; i++) bufferByte(0);
   bufferChecksum();
   return sendBuffer();
 }
@@ -111,7 +117,8 @@ bool MacSublayer::sendBuffer()
 {
   if (mTimersRunning > 0)
   {
-    info("Vyksta gavimas – kad nebūtų kolizijos, neleista siųsti.\n");
+    info("Vyksta gavimas (%lld) – kad nebūtų kolizijos, neleista siųsti.\n",
+         mTimersRunning);
     return false;
   }
   sendPreamble();
