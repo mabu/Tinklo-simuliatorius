@@ -91,7 +91,7 @@ void send_signal(int sender, char valueToSend)
   {
     if (it->first != sender)
     {
-      if (send(it->first, &valueToSend, 1, MSG_NOSIGNAL) != 1)
+      if (send(it->first, &valueToSend, 1, MSG_NOSIGNAL | MSG_DONTWAIT) != 1)
       {
         if (errno == ECONNRESET || errno == EPIPE)
         {
