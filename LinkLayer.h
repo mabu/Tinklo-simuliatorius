@@ -96,7 +96,7 @@ class LinkLayer: public Layer
 
   public:
     LinkLayer(Node* pNode, MacSublayer* pMacSublayer);
-    void timer(); // žr. Layer.h
+    void timer(long long id); // žr. Layer.h
     bool fromNetworkLayer(MacAddress destination, Byte* packet,
                           int packetLength);
     void fromMacSublayer(MacAddress source, Frame& frame);

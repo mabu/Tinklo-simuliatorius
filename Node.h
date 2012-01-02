@@ -17,19 +17,19 @@ class LinkLayer;
 class Node
 {
   private:
-    int                                          mWireSocket;
-    int                                          mAppSocket;
-    MacAddress                                   mMacAddress;
-    IpAddress                                    mIpAddress;
-    NetworkLayer                                 mNetworkLayer;
-    TransportLayer                               mTransportLayer;
-    std::map<int, MacSublayer*>                  mSocketToMacSublayer;
-    std::unordered_map<MacSublayer*, int>        mMacSublayerToSocket;
-    std::map<int, int>                           mSocketToApp;
-    std::unordered_map<int, int>                 mAppToSocket;
-    std::unordered_map<MacSublayer*, LinkLayer*> mMacToLink;
-    fd_set                                       mFdSet;
-    std::vector<std::pair<clock_t, Layer*> >     mTimers;
+    int                                              mWireSocket;
+    int                                              mAppSocket;
+    MacAddress                                       mMacAddress;
+    IpAddress                                        mIpAddress;
+    NetworkLayer                                     mNetworkLayer;
+    TransportLayer                                   mTransportLayer;
+    map<int, MacSublayer*>                           mSocketToMacSublayer;
+    unordered_map<MacSublayer*, int>                 mMacSublayerToSocket;
+    map<int, int>                                    mSocketToApp;
+    unordered_map<int, int>                          mAppToSocket;
+    unordered_map<MacSublayer*, LinkLayer*>          mMacToLink;
+    fd_set                                           mFdSet;
+    vector<pair<clock_t, pair<Layer*, long long> > > mTimers;
 
   public:
     Node(int wireSocket, int appSocket, MacAddress macAddress,
@@ -48,12 +48,13 @@ class Node
 
     /**
      * Paleidžia laikmatį.
-     * Praėjus milliseconds milisekundžių įvykdo layer->timer().
+     * Praėjus milliseconds milisekundžių įvykdo layer->timer(id).
      *
      * @param layer        tinklo lygio esybė, kuriai taikomas laikmatis
      * @param milliseconds už kelių milisekundžių laikmatis turi baigtis
+     * @param id           kokia reikšmė pasibaigus perduodama layer->timer
      */
-    void       startTimer(Layer* layer, int milliseconds);
+    void       startTimer(Layer* layer, int milliseconds, long long id);
 
     IpAddress  ipAddress();
     MacAddress macAddress();

@@ -11,7 +11,7 @@ class TransportLayer: public Layer
 {
   public:
     TransportLayer(Node* pNode);
-    void timer(); // žr. Layer.h
+    void timer(long long id); // žr. Layer.h
 
   protected:
     const char* layerName()

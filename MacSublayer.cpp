@@ -4,7 +4,7 @@
 
 #define WHOLE_FRAME_ARRIVED mInputBuffer.size() \
                             == FRAME_START \
-                              + std::max(MIN_DATA_LENGTH, mLength) * 8 \
+                              + max(MIN_DATA_LENGTH, mLength) * 8 \
                               + CHECKSUM_LENGTH
 
 MacSublayer::MacSublayer(Node* pNode):
@@ -86,7 +86,7 @@ void MacSublayer::fromPhysicalLayer(char voltage)
   }
   else
   {
-    mpNode->startTimer(this, SIGNAL_TIMEOUT);
+    mpNode->startTimer(this, SIGNAL_TIMEOUT, 0);
     if (mTimersRunning < 0) mTimersRunning *= -1;
     mTimersRunning++;
   }
@@ -126,7 +126,7 @@ bool MacSublayer::sendBuffer()
   return true;
 }
 
-void MacSublayer::timer()
+void MacSublayer::timer(long long id)
 {
   if      (mTimersRunning > 0) --mTimersRunning;
   else if (mTimersRunning < 0) ++mTimersRunning;

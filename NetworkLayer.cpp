@@ -6,7 +6,7 @@ NetworkLayer::NetworkLayer(Node* pNode):
   Layer(pNode)
 { }
 
-void NetworkLayer::timer()
+void NetworkLayer::timer(long long id)
 {
 }
 

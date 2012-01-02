@@ -5,6 +5,6 @@ TransportLayer::TransportLayer(Node* pNode):
   Layer(pNode)
 { }
 
-void TransportLayer::timer()
+void TransportLayer::timer(long long id)
 {
 }

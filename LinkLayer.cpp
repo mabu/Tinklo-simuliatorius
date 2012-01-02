@@ -6,7 +6,7 @@ LinkLayer::LinkLayer(Node* pNode, MacSublayer* pMacSublayer):
   mpMacSublayer(pMacSublayer)
 { }
 
-void LinkLayer::timer()
+void LinkLayer::timer(long long id)
 {
 }
 

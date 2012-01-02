@@ -35,7 +35,7 @@ class Node;
 class MacSublayer: public Layer
 {
   private:
-    typedef std::vector<bool> BitVector;
+    typedef vector<bool> BitVector;
 
   private:
     BitVector   mOutputBuffer;
@@ -78,7 +78,7 @@ class MacSublayer: public Layer
      */
     bool sendBuffer();
 
-    void timer(); // žr. Layer.h
+    void timer(long long id); // žr. Layer.h
 
     void selfDestruct();
 

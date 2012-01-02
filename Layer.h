@@ -15,7 +15,7 @@ class Layer
     /**
      * Iškviečiama, kai baigiasi objekto iškviestas laikmatis.
      */
-    virtual void timer() = 0;
+    virtual void timer(long long id) = 0;
 
   protected:
     Layer(Node* pNode);

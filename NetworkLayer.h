@@ -1,6 +1,7 @@
 #ifndef NETWORKLAYER_H
 #define NETWORKLAYER_H
 #include <set>
+#include "types.h"
 #include "Layer.h"
 
 class Node;
@@ -12,11 +13,11 @@ class LinkLayer;
 class NetworkLayer: public Layer
 {
   private:
-    std::set<LinkLayer*> links;
+    set<LinkLayer*> links;
 
   public:
     NetworkLayer(Node* pNode);
-    void timer(); // žr. Layer.h
+    void timer(long long id); // žr. Layer.h
     void addLink(LinkLayer* pLinkLayer);
     void removeLink(LinkLayer* pLinkLayer);
 

@@ -46,11 +46,11 @@ void Node::layerMessage(char* message)
   printf("%s", message);
 }
 
-void Node::startTimer(Layer* layer, int milliseconds)
+void Node::startTimer(Layer* layer, int milliseconds, long long id)
 {
-  mTimers.push_back(std::make_pair(clock() + milliseconds * (CLOCKS_PER_SEC
-                                                            / 1000.0), layer));
-  std::push_heap(mTimers.begin(), mTimers.end());
+  mTimers.push_back(make_pair(clock() + milliseconds * (CLOCKS_PER_SEC / 1000),
+                              make_pair(layer, id)));
+  push_heap(mTimers.begin(), mTimers.end());
   //printf("Pradėtas skaičiuoti %dms laikas. Dabar eilėje %lu.\n", milliseconds,
   //       mTimers.size());
 }
@@ -69,15 +69,15 @@ void Node::run()
 {
   while (1)
   {
-    int moreThanMaxSocket = std::max(mWireSocket, mAppSocket) + 1;
+    int moreThanMaxSocket = max(mWireSocket, mAppSocket) + 1;
     if (false == mSocketToMacSublayer.empty())
     {
-      moreThanMaxSocket = std::max(moreThanMaxSocket,
+      moreThanMaxSocket = max(moreThanMaxSocket,
                               mSocketToMacSublayer.rbegin()->first + 1);
     }
     if (false == mSocketToApp.empty())
     {
-      moreThanMaxSocket = std::max(moreThanMaxSocket,
+      moreThanMaxSocket = max(moreThanMaxSocket,
                               mSocketToApp.rbegin()->first + 1);
     }
     fd_set tempFdSet = mFdSet;
@@ -132,9 +132,9 @@ void Node::run()
       }
       MacSublayer* pMacSublayer = new MacSublayer(this);
       LinkLayer*   pLinkLayer   = new LinkLayer(this, pMacSublayer);
-      mMacToLink.insert(std::make_pair(pMacSublayer, pLinkLayer));
-      mSocketToMacSublayer.insert(std::make_pair(wireSocket, pMacSublayer));
-      mMacSublayerToSocket.insert(std::make_pair(pMacSublayer, wireSocket));
+      mMacToLink.insert(make_pair(pMacSublayer, pLinkLayer));
+      mSocketToMacSublayer.insert(make_pair(wireSocket, pMacSublayer));
+      mMacSublayerToSocket.insert(make_pair(pMacSublayer, wireSocket));
       mNetworkLayer.addLink(pLinkLayer);
       FD_SET(wireSocket,  &mFdSet);
       //sendRandomFrames(pMacSublayer);
@@ -143,11 +143,10 @@ void Node::run()
 
     while (!mTimers.empty() && mTimers.front().first <= clock())
     {
-      Layer* pLayer = mTimers.front().second;
-      std::pop_heap(mTimers.begin(), mTimers.end());
+      pair<Layer*, long long>& timer = mTimers.front().second;
+      timer.first->timer(timer.second);
+      pop_heap(mTimers.begin(), mTimers.end());
       mTimers.pop_back();
-      //printf("Baigtas skaičiuoti laikas. Dabar eilėje %u.\n", mTimers.size());
-      pLayer->timer();
     }
   }
 }
