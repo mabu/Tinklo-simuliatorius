@@ -238,8 +238,6 @@ void Node::sendRandomPackets(LinkLayer* pLinkLayer)
 {
   Byte foo[2];
   pLinkLayer->fromNetworkLayer(BROADCAST_MAC, NULL, 0);
-  if (mMacAddress == 0x003344221122)
-    pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
-    else
+  pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
   pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
 }

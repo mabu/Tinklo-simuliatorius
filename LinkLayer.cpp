@@ -256,6 +256,11 @@ void LinkLayer::toMacSublayer(MacAddress destination, Connection* pConnection)
       info("Siunčia į %llx (tipas %hhu, Seq %hhu, Ack %hhu)\n", destination,
            mLastControlByte.type, mLastControlByte.seq, mLastControlByte.ack);
       mpMacSublayer->fromLinkLayer(destination, pFrame);
+      if (destination == BROADCAST_MAC)
+      {
+        delete pConnection->framePtrQueue.front();
+        pConnection->framePtrQueue.pop_front();
+      }
     }
   }
 }
