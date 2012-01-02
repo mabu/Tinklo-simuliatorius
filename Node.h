@@ -44,6 +44,8 @@ class Node
      */
     void       layerMessage(const char* format, va_list vl);
 
+    void       layerMessage(char* message);
+
     /**
      * Paleidžia laikmatį.
      * Praėjus milliseconds milisekundžių įvykdo layer->timer().

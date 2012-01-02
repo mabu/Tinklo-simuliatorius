@@ -82,6 +82,10 @@ class MacSublayer: public Layer
 
     void selfDestruct();
 
+  protected:
+    const char* layerName()
+      { return "MAC polygis"; }
+
   private:
     void bufferAddresss(MacAddress macAddress);
     void bufferByte(Byte byte);

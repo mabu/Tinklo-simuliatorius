@@ -41,6 +41,11 @@ void Node::layerMessage(const char* format, va_list vl)
   vprintf(format, vl);
 }
 
+void Node::layerMessage(char* message)
+{
+  printf("%s", message);
+}
+
 void Node::startTimer(Layer* layer, int milliseconds)
 {
   mTimers.push_back(std::make_pair(clock() + milliseconds * (CLOCKS_PER_SEC

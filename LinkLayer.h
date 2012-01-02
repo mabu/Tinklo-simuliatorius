@@ -100,6 +100,10 @@ class LinkLayer: public Layer
     bool fromNetworkLayer(MacAddress destination, Byte* packet,
                           int packetLength);
     void fromMacSublayer(MacAddress source, Frame& frame);
+
+  protected:
+    const char* layerName()
+      { return "Kanalinis lygis"; }
 };
 
 #endif

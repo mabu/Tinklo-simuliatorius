@@ -20,6 +20,7 @@ class Layer
   protected:
     Layer(Node* pNode);
     void info(const char* format, ...);
+    virtual const char* layerName() = 0;
 };
 
 #endif

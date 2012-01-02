@@ -19,6 +19,10 @@ class NetworkLayer: public Layer
     void timer(); // žr. Layer.h
     void addLink(LinkLayer* pLinkLayer);
     void removeLink(LinkLayer* pLinkLayer);
+
+  protected:
+    const char* layerName()
+      { return "Tinklo lygis"; }
 };
 
 #endif
