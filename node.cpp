@@ -107,6 +107,7 @@ MacAddress parse_mac_address(char* macStr)
 
 int main(int argc, char* argv[])
 {
+  srand(time(NULL));
   if (argc < 3 || argc > 4)
   {
     printf(USAGE_INFO);
@@ -158,6 +159,7 @@ int main(int argc, char* argv[])
   gpNode = new Node(gWireSocket, gAppSocket, macAddress, ipAddress);
   printf("Startuoja...\n");
   gpNode->run();
+  printf("Finišuoja...\n");
 
   return 0;
 }

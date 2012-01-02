@@ -4,11 +4,14 @@
 #include "Layer.h"
 #include "Frame.h"
 #include <unordered_map>
-#include <queue>
+#include <deque>
 
 #define ACK_TIMEOUT           100
-#define FRAME_TIMEOUT         500
+#define MIN_FRAME_TIMEOUT    1000LL
+#define MAX_FRAME_TIMEOUT    5000LL
+#define FRAME_TIMEOUT_DECR     50LL
 #define MAX_FRAME_QUEUE_SIZE   10
+#define MAX_RETRIES             5
 
 class Node;
 class MacSublayer;
@@ -30,12 +33,12 @@ class MacSublayer;
  * ACK_TIMEOUT milisekundžių turi būti išsiunčiamas kadras, kurio Ack laukas 
  * vienetu didesnis už gautąjį Seq. Jei išsiuntus duomenis per nustatytą laiką
  * negaunamas kadras su Ack lauku, vienetu didesniu už siųstą Seq, kadro
- * siuntimas kartojamas. Šis laukimo laikas priklauso nuo to, kelintą kartą
- * siunčiamas tas pats kadras, ir yra atsitiktinis iš intervalo
- * [2^x * FRAME_TIMEOUT, 2^(x + 1) * FRAME_TIMEOUT) milisekundėmis
- * (čia x = min(10, kiek kartų buvo siųstas šis kadras anksčiau). Jei per 16
- * siuntimų patvirtinimo nesulaukiama, ryšys nutraukiamas ir visi eilėje buvę
- * kadrai išmetami.
+ * siuntimas kartojamas. Pirmu kadro siuntimo mėginimu laukimo laikas lygus
+ * max(X - FRAME_TIMEOUT_DECR, MIN_FRAME_TIMEOUT), kitais atvejais –
+ * atsitiktinis iš intervalo [X, 3X), bet nedidesnis už MAX_FRAME_TIMEOUT;
+ * čia X yra paskutinio tam pačiam adresatui siųsto kadro laukimo laikas. Jei
+ * per MAX_RETRIES bandymų patvirtinimo nesulaukiama, ryšys nutraukiamas ir
+ * visi eilėje buvę kadrai išmetami.
  * Po ryšio užmezgimo pirmo siunčiamo paketo Seq laukas lygus 1, vėlesnių didėja
  * po vieną. Kai Seq viršija MAX_SEQ, jis tampa 0.
  *
@@ -46,17 +49,18 @@ class MacSublayer;
 class LinkLayer: public Layer
 {
   private:
-    typedef queue<Frame>   FrameQueue;
+    typedef deque<Frame*>   FramePtrQueue;
 
     struct ControlByte
     {
-      bool type : 2; // 0 – užmezgimas, 1 – duomenys, 2 – duomenys visiems
-      bool seq  : 3;
-      bool ack  : 3;
+      unsigned char type : 2; // 0 – užmezgimas, 1 – vienam, 2 – visiems
+      unsigned char seq  : 3;
+      unsigned char ack  : 3;
+
       ControlByte(Byte byte):
-        type(byte & 0xc0),
-         seq(byte & 0x38),
-         ack(byte & 0x07)
+        type((byte >> 6) & 3),
+         seq((byte >> 3) & 7),
+         ack(byte & 7)
       { }
       ControlByte():
         type(0),
@@ -65,9 +69,9 @@ class LinkLayer: public Layer
       { }
       ControlByte& operator=(Byte byte)
       {
-        type = byte & 0xc0;
-        seq  = byte & 0x38;
-        ack  = byte & 0x07;
+        type = (byte >> 6) & 3;
+        seq  = (byte >> 3) & 7;
+        ack  = byte & 7;
         return *this;
       }
       operator Byte()
@@ -78,32 +82,65 @@ class LinkLayer: public Layer
 
     /**
      * Nusako ryšio būseną pagal paskutinį išsiųstą nepatvirtintą kadrą.
-     * Jei kadro nėra, galima siųsti naują – jį įrašome, pasiėmę controlByte.
+     * Prieš siunčiant į pirmą kadro baitą įrašomas controlByte.
      */
     struct Connection
     {
-      ControlByte controlByte;
-      FrameQueue  frameQueue;  // nepristatyti kadrai
-      int         timer;       // identifikatorius laikmačio, į kurį reikėtų
-                               // reaguoti pakartotinai išsiunčiant kadrą
-      int         timeouts;    // kiek kartų paskutinis kadras buvo pakartinai
-                               // išsiųstas
+      ControlByte   controlByte;
+      FramePtrQueue framePtrQueue; // nepristatyti kadrai
+      int           timer;         // identifikatorius laikmačio, į kurį reikėtų
+                                   // reaguoti pakartotinai išsiunčiant kadrą
+      int           timeouts;      // kiek kartų eilės priekyje esantis kadras
+                                   // buvo išsiųstas
+      int           lastDuration;  // paskiausia laukimo trukmė
+      
+      Connection():
+        controlByte(0),
+        timer(0),
+        timeouts(0),
+        lastDuration(MIN_FRAME_TIMEOUT)
+       {
+         framePtrQueue.push_back(new Frame(1)); // VALGRIND
+         framePtrQueue.back()->data[0] = ControlByte();
+       }
+
+       ~Connection()
+       {
+         while (!framePtrQueue.empty())
+         {
+           delete framePtrQueue.back();
+           framePtrQueue.pop_back();
+         }
+       }
     };
 
   private:
-    MacSublayer*                                mpMacSublayer;
-    unordered_map<MacAddress, ControlByte>      mConnections;
+    MacSublayer*                                             mpMacSublayer;
+    unordered_map<MacAddress, Connection>                    mConnections;
+    unsigned long long                                       mTimersStarted;
+    unsigned long long                                       mTimersFinished;
+    unordered_map<long long, pair<MacAddress, Connection*> > mTimerToConnection;
+    MacAddress                                               mLastDestination;
+    ControlByte                                              mLastControlByte;
+    bool                                                     mIsZombie : 1;
 
   public:
     LinkLayer(Node* pNode, MacSublayer* pMacSublayer);
     void timer(long long id); // žr. Layer.h
     bool fromNetworkLayer(MacAddress destination, Byte* packet,
-                          int packetLength);
-    void fromMacSublayer(MacAddress source, Frame& frame);
+                          FrameLength packetLength);
+    void fromMacSublayer(MacAddress source, Frame& rFrame);
+    void selfDestruct();
 
   protected:
     const char* layerName()
       { return "Kanalinis lygis"; }
+
+  private:
+    void toMacSublayer(MacAddress destination, Connection* pConnection);
+    void startTimer(MacAddress destination, Connection* pConnection,
+                    bool ack = false);
+    void needsAck(MacAddress destination, Connection* pConnection);
 };
 
 #endif

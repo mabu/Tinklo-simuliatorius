@@ -105,6 +105,7 @@ void send_signal(int sender, char valueToSend)
           printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
         }
       }
+      else printf("Nusiųsta į %s\n", it->second.c_str());
     }
   }
 }

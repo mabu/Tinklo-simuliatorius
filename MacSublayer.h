@@ -13,7 +13,7 @@
 #define NEGATIVE_VOLTAGE       -3
 #define CRC_POLYNOMIAL 0x04c11db7 // (1) 0000 0100 1100 0001 0001 1101 1011 0111
 #define CHECKSUM_LENGTH        32 // bitais
-#define SIGNAL_TIMEOUT      10000 // jei tiek milisekundžių negauna signalo,
+#define SIGNAL_TIMEOUT        100 // jei tiek milisekundžių negauna signalo,
                                   // laikoma, kad gavimas nutrūko (leidžiama
                                   // siųsti)
 // nuo kelinto bito prasideda kadras:
@@ -67,7 +67,7 @@ class MacSublayer: public Layer
      * @return true, jei pavyko išsiųsti, false – priešingu atveju (pavyzdžiui,
      *         tuo metu laidas buvo naudojamas ir norėta išvengti kolizijos)
      */
-    bool fromLinkLayer(MacAddress destination, Frame& frame);
+    bool fromLinkLayer(MacAddress destination, Frame* pFrame);
 
     /**
      * Bando pakartotinai siųsti vėliausiai supakuotą kadrą.
@@ -90,12 +90,18 @@ class MacSublayer: public Layer
     void bufferAddresss(MacAddress macAddress);
     void bufferByte(Byte byte);
     void bufferChecksum();
-    void sendPreamble();
-    void sendByte(Byte byte);
-    void sendBit(bool bit);
+    bool sendPreamble();
+    bool sendBit(bool bit);
     void calculateChecksum(BitVector& bufferWithChecksum);
     bool isInputValid();
     void receivedBit(bool bit);
+
+    /**
+     * Išsiunčia kadro turinį (baitus skaičiais) į info().
+     *
+     * @param rFrame kadras
+     */
+    void dumpFrame(Frame& rFrame);
 };
 
 #endif

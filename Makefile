@@ -1,4 +1,4 @@
-FLAGS=-std=c++0x -Wall -O2
+FLAGS=-std=c++0x -Wall -g
 SOURCES=common.cpp         \
         Layer.cpp          \
         LinkLayer.cpp      \
@@ -19,10 +19,10 @@ wire.o: wire.cpp common.o
 	g++ -c $(FLAGS) wire.cpp
 
 node: $(OBJECTS) node.cpp
-	g++ -o node $(FLAGS) node.cpp $(OBJECTS)
+	g++ -o node $(FLAGS) node.cpp $(OBJECTS) -lrt
 
 %.o: %.cpp $(HEADERS)
 	g++ -c $(FLAGS) $*.cpp
 
 clean:
-	rm wire node *.o
+	rm -f wire node *.o

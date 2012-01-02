@@ -17,19 +17,19 @@ class LinkLayer;
 class Node
 {
   private:
-    int                                              mWireSocket;
-    int                                              mAppSocket;
-    MacAddress                                       mMacAddress;
-    IpAddress                                        mIpAddress;
-    NetworkLayer                                     mNetworkLayer;
-    TransportLayer                                   mTransportLayer;
-    map<int, MacSublayer*>                           mSocketToMacSublayer;
-    unordered_map<MacSublayer*, int>                 mMacSublayerToSocket;
-    map<int, int>                                    mSocketToApp;
-    unordered_map<int, int>                          mAppToSocket;
-    unordered_map<MacSublayer*, LinkLayer*>          mMacToLink;
-    fd_set                                           mFdSet;
-    vector<pair<clock_t, pair<Layer*, long long> > > mTimers;
+    int                                          mWireSocket;
+    int                                          mAppSocket;
+    MacAddress                                   mMacAddress;
+    IpAddress                                    mIpAddress;
+    NetworkLayer                                 mNetworkLayer;
+    TransportLayer                               mTransportLayer;
+    map<int, MacSublayer*>                       mSocketToMacSublayer;
+    unordered_map<MacSublayer*, int>             mMacSublayerToSocket;
+    map<int, int>                                mSocketToApp;
+    unordered_map<int, int>                      mAppToSocket;
+    unordered_map<MacSublayer*, LinkLayer*>      mMacToLink;
+    fd_set                                       mFdSet;
+    multimap<timespec, pair<Layer*, long long> > mTimers;
 
   public:
     Node(int wireSocket, int appSocket, MacAddress macAddress,
@@ -39,12 +39,12 @@ class Node
     /**
      * Apdoroja gautą informacinį pranešimą.
      *
-     * @param format formatas, žr. man vprintf
-     * @param vl     argumentai
+     * @param layerName lygio, kuris siunčia pranešimą, pavadinimas
+     * @param format    formatas, žr. man vprintf
+     * @param vl        argumentai
      */
-    void       layerMessage(const char* format, va_list vl);
-
-    void       layerMessage(char* message);
+    void       layerMessage(const char* layerName, const char* format,
+                            va_list vl);
 
     /**
      * Paleidžia laikmatį.
@@ -70,11 +70,13 @@ class Node
      *
      * @param pMacSublayer rodyklė į MAC polygį, siunčiantį signalą
      * @param voltage      signalo įtampa
+     * @return true, jei nusiųsti pavyko; false, jei atsijungė laidas
      */
-    void toPhysicalLayer(MacSublayer* pMacSublayer, char voltage);
+    bool toPhysicalLayer(MacSublayer* pMacSublayer, char voltage);
 
     void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
-                     Frame& frame);
+                     Frame& rFrame);
+    void toNetworkLayer(Byte* packet, FrameLength packetLength);
 
   private:
     /**
@@ -86,6 +88,7 @@ class Node
     void removeLink(int wireSocket, MacSublayer* pMacSublayer);
 
     void sendRandomFrames(MacSublayer* pMacSublayer); // testavimui
+    void sendRandomPackets(LinkLayer* pLinkLayer);    // testavimui
 };
 
 #endif

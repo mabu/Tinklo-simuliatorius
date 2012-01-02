@@ -1,11 +1,15 @@
 #include "MacSublayer.h"
 #include "Node.h"
 #include <algorithm>
+#include <cstring>
 
 #define WHOLE_FRAME_ARRIVED mInputBuffer.size() \
                             == FRAME_START \
                               + max(MIN_DATA_LENGTH, mLength) * 8 \
                               + CHECKSUM_LENGTH
+
+#define TO_PHYSICAL_LAYER(x) if (!mpNode->toPhysicalLayer(this, (x))) \
+                               return false;
 
 MacSublayer::MacSublayer(Node* pNode):
   Layer(pNode),
@@ -15,7 +19,8 @@ MacSublayer::MacSublayer(Node* pNode):
   mTimersRunning(0),
   mReceivingData(false),
   mJustArrived(false),
-  mIsZombie(false)
+  mIsZombie(false),
+  mLength(0)
 { }
 
 void MacSublayer::fromPhysicalLayer(char voltage)
@@ -70,7 +75,7 @@ void MacSublayer::fromPhysicalLayer(char voltage)
     {
       source = (source << 1) + !!mInputBuffer[i];
     }
-    info("Gavo %hu ilgio paketą nuo %llx.\n", mLength, source);
+    info("Gavo %hu ilgio kadrą nuo %llx:\n", mLength, source);
     Frame frame(mLength);
     for (int i = 0; i < mLength; i++)
     {
@@ -82,6 +87,7 @@ void MacSublayer::fromPhysicalLayer(char voltage)
       }
     }
     mInputBuffer.clear();
+    dumpFrame(frame);
     mpNode->toLinkLayer(this, source, frame);
   }
   else
@@ -92,23 +98,24 @@ void MacSublayer::fromPhysicalLayer(char voltage)
   }
 }
 
-bool MacSublayer::fromLinkLayer(MacAddress destination, Frame& frame)
+bool MacSublayer::fromLinkLayer(MacAddress destination, Frame* pFrame)
 {
-  if (frame.length > MAX_DATA_LENGTH)
+  if (pFrame->length > MAX_DATA_LENGTH)
   {
-    info("Nori siųsti per ilgą paketą (ilgis %hu > %d).\n", frame.length,
+    info("Nori siųsti per ilgą kadrą (ilgis %hu > %d).\n", pFrame->length,
          MAX_DATA_LENGTH);
     return false;
   }
-  info("Siunčia %hu ilgio paketą į %llx.\n", frame.length, destination);
+  info("Siunčia %hu ilgio kadrą į %llx:\n", pFrame->length, destination);
+  dumpFrame(*pFrame);
   mOutputBuffer.clear();
   mConsequentOnes = 0;
   bufferAddresss(destination);
   bufferAddresss(mpNode->macAddress());
-  bufferByte((frame.length >> 8) & 0xff);
-  bufferByte(frame.length & 0xff);
-  for (FrameLength i = 0; i < frame.length; i++) bufferByte(frame.data[i]);
-  for (FrameLength i = frame.length; i < MIN_DATA_LENGTH; i++) bufferByte(0);
+  bufferByte((pFrame->length >> 8) & 0xff);
+  bufferByte(pFrame->length & 0xff);
+  for (FrameLength i = 0; i < pFrame->length; i++) bufferByte(pFrame->data[i]);
+  for (FrameLength i = pFrame->length; i < MIN_DATA_LENGTH; i++) bufferByte(0);
   bufferChecksum();
   return sendBuffer();
 }
@@ -121,8 +128,8 @@ bool MacSublayer::sendBuffer()
          mTimersRunning);
     return false;
   }
-  sendPreamble();
-  for (bool bit : mOutputBuffer) sendBit(bit);
+  if (!sendPreamble()) return false;
+  for (bool bit : mOutputBuffer) if (!sendBit(bit)) return false;
   return true;
 }
 
@@ -166,41 +173,35 @@ void MacSublayer::bufferChecksum()
                        bufferWithChecksum.end());
 }
 
-void MacSublayer::sendPreamble()
+bool MacSublayer::sendPreamble()
 {
-  mpNode->toPhysicalLayer(this, NEGATIVE_VOLTAGE);
-  mpNode->toPhysicalLayer(this, POSITIVE_VOLTAGE);
+  TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
+  TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
   for (int i = 0; i < 6; i++)
   {
-    mpNode->toPhysicalLayer(this, POSITIVE_VOLTAGE);
-    mpNode->toPhysicalLayer(this, NEGATIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
   }
-  mpNode->toPhysicalLayer(this, NEGATIVE_VOLTAGE);
-  mpNode->toPhysicalLayer(this, POSITIVE_VOLTAGE);
+  TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
+  TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
+  return true;
 }
 
-void MacSublayer::sendByte(Byte byte)
-{
-  for (int i = 0; i < 8; i++)
-  {
-    sendBit(byte & (1 << (7 - i)));
-  }
-}
-
-void MacSublayer::sendBit(bool bit)
+bool MacSublayer::sendBit(bool bit)
 {
   if (bit)
   {
-    mpNode->toPhysicalLayer(this, POSITIVE_VOLTAGE);
-    mpNode->toPhysicalLayer(this, NEGATIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
     if (5 == ++mConsequentOnes) sendBit(0);
   }
   else
   {
     mConsequentOnes = 0;
-    mpNode->toPhysicalLayer(this, NEGATIVE_VOLTAGE);
-    mpNode->toPhysicalLayer(this, POSITIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
+    TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
   }
+  return true;
 }
 
 void MacSublayer::calculateChecksum(BitVector& bufferWithChecksum)
@@ -275,4 +276,18 @@ void MacSublayer::receivedBit(bool bit)
     }
     else if (mPreambleBits != 5) mJustArrived = true;
   }
+}
+
+void MacSublayer::dumpFrame(Frame& rFrame)
+{
+  char string[rFrame.length * 4 + 4];
+  string[0] = '\0';
+  for (int i = 0; i < rFrame.length; i++)
+  {
+    char current[5];
+    sprintf(current, " %hhu", rFrame.data[i]);
+    strcat(string, current);
+  }
+  strcat(string, "\n");
+  info(string);
 }

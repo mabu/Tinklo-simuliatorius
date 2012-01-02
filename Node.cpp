@@ -8,6 +8,25 @@
 
 #define MILLION 1000000
 
+bool operator < (const timespec& a, const timespec& b)
+{
+  if (a.tv_sec == b.tv_sec) return a.tv_nsec < b.tv_nsec;
+  else return a.tv_sec < b.tv_sec;
+}
+
+timespec operator - (const timespec& a, const timespec& b)
+{
+  timespec result = a;
+  result.tv_sec -= b.tv_sec;
+  result.tv_nsec -= b.tv_nsec;
+  if (result.tv_nsec < 0)
+  {
+    result.tv_nsec += 1000 * MILLION;
+    --result.tv_sec;
+  }
+  return result;
+}
+
 Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
            IpAddress ipAddress):
   mWireSocket(wireSocket),
@@ -36,23 +55,23 @@ Node::~Node()
   }
 }
 
-void Node::layerMessage(const char* format, va_list vl)
+void Node::layerMessage(const char* layerName, const char* format, va_list vl)
 {
+  timespec current;
+  clock_gettime(CLOCK_MONOTONIC, &current);
+  printf("[%ld.%ld] %s: ", current.tv_sec, current.tv_nsec, layerName);
   vprintf(format, vl);
-}
-
-void Node::layerMessage(char* message)
-{
-  printf("%s", message);
 }
 
 void Node::startTimer(Layer* layer, int milliseconds, long long id)
 {
-  mTimers.push_back(make_pair(clock() + milliseconds * (CLOCKS_PER_SEC / 1000),
-                              make_pair(layer, id)));
-  push_heap(mTimers.begin(), mTimers.end());
-  //printf("Pradėtas skaičiuoti %dms laikas. Dabar eilėje %lu.\n", milliseconds,
-  //       mTimers.size());
+  timespec time;
+  clock_gettime(CLOCK_MONOTONIC, &time);
+  time.tv_sec  += milliseconds / 1000;
+  time.tv_nsec += milliseconds % 1000 * MILLION;
+  time.tv_sec += time.tv_nsec / (1000 * MILLION);
+  time.tv_nsec %= 1000 * MILLION;
+  mTimers.insert(make_pair(time, make_pair(layer, id)));
 }
 
 IpAddress Node::ipAddress()
@@ -81,44 +100,47 @@ void Node::run()
                               mSocketToApp.rbegin()->first + 1);
     }
     fd_set tempFdSet = mFdSet;
-    timeval tv;
+    timespec timeout;
     if (!mTimers.empty())
     {
-      clock_t current = clock();
-      if (current > mTimers.front().first)
+      clock_gettime(CLOCK_MONOTONIC, &timeout);
+      if (timeout < mTimers.begin()->first)
       {
-        clock_t microsecondsLeft = (mTimers.front().first - current)
-                                   / (CLOCKS_PER_SEC / (double) MILLION);
-        tv.tv_sec = microsecondsLeft / MILLION;
-        tv.tv_usec = microsecondsLeft % MILLION;
+        timeout = mTimers.begin()->first - timeout;
       }
       else
       {
-        tv.tv_sec = 0;
-        tv.tv_usec = 0;
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = 0;
       }
     }
-    if (select(moreThanMaxSocket, &tempFdSet, NULL, NULL, (mTimers.empty() ?
-                                                           NULL : &tv)) < 0)
+    if (pselect(moreThanMaxSocket, &tempFdSet, NULL, NULL,
+                (mTimers.empty() ? NULL : &timeout), NULL) < 0)
     {
       perror("select");
       break;
     }
 
-    for (auto wire : mSocketToMacSublayer)
+    for (auto it = mSocketToMacSublayer.begin();
+         it != mSocketToMacSublayer.end();)
     {
-      if (FD_ISSET(wire.first, &tempFdSet))
+      if (FD_ISSET(it->first, &tempFdSet))
       {
         char voltage;
-        int bytesReceived = recv(wire.first, &voltage, 1, 0);
-        if (bytesReceived == 1) wire.second->fromPhysicalLayer(voltage);
-        else if (bytesReceived == 0) removeLink(wire.first, wire.second);
+        int bytesReceived = recv(it->first, &voltage, 1, 0);
+        if (bytesReceived == 1) (it++)->second->fromPhysicalLayer(voltage);
+        else if (bytesReceived == 0)
+        {
+          auto old = it++;
+          removeLink(old->first, old->second);
+        }
         else
         {
           perror("Klaida priimant signalą iš laido");
           break;
         }
       }
+      else ++it;
     }
 
     if (FD_ISSET(mWireSocket, &tempFdSet))
@@ -138,34 +160,49 @@ void Node::run()
       mNetworkLayer.addLink(pLinkLayer);
       FD_SET(wireSocket,  &mFdSet);
       //sendRandomFrames(pMacSublayer);
+      sendRandomPackets(pLinkLayer);
     }
 //    if (FD_ISSET(mAppSocket,  &tempFdSet))
 
-    while (!mTimers.empty() && mTimers.front().first <= clock())
+    while (!mTimers.empty())
     {
-      pair<Layer*, long long>& timer = mTimers.front().second;
+      timespec current;
+      clock_gettime(CLOCK_MONOTONIC, &current);
+      if (current < mTimers.begin()->first) break;
+      pair<Layer*, long long> timer = mTimers.begin()->second;
+      mTimers.erase(mTimers.begin());
       timer.first->timer(timer.second);
-      pop_heap(mTimers.begin(), mTimers.end());
-      mTimers.pop_back();
     }
   }
 }
 
-void Node::toPhysicalLayer(MacSublayer* pMacSublayer, char voltage)
+bool Node::toPhysicalLayer(MacSublayer* pMacSublayer, char voltage)
 {
   //printf("Siunčia signalą %hhd\n", voltage);
-  int wireSocket = mMacSublayerToSocket.find(pMacSublayer)->second;
-  if (1 != send(wireSocket, &voltage, 1, MSG_NOSIGNAL))
+  auto it = mMacSublayerToSocket.find(pMacSublayer);
+  if (it != mMacSublayerToSocket.end())
   {
-    perror("Nepavyko išsiųsti signalo");
-    removeLink(wireSocket, pMacSublayer);
+    if (1 != send(it->second, &voltage, 1, MSG_NOSIGNAL))
+    {
+      perror("Nepavyko išsiųsti signalo");
+      removeLink(it->second, pMacSublayer);
+    }
+    else return true;
   }
+  printf("Laidas atsijungė prieš išsiunčiant signalą.\n");
+  return false;
 }
 
 void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
-                       Frame& frame)
+                       Frame& rFrame)
 {
-  mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, frame);
+  mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, rFrame);
+}
+
+void Node::toNetworkLayer(Byte* packet, FrameLength packetLength)
+{
+  printf("Tinklo lygiui keliaus %hu ilgio paketas.\n", packetLength);
+  // TODO
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
@@ -173,11 +210,16 @@ void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
   printf("Atsijungė laidas.\n");
   if (-1 == close(wireSocket)) perror("Klaida atsijungiant nuo laido");
   auto it = mMacToLink.find(pMacSublayer);
+  if (it == mMacToLink.end())
+  {
+    printf("Jau buvo atsijungta.\n");
+    return;
+  }
   mNetworkLayer.removeLink(it->second);
   mMacSublayerToSocket.erase(pMacSublayer);
   mSocketToMacSublayer.erase(wireSocket);
   pMacSublayer->selfDestruct();
-  delete it->second;
+  it->second->selfDestruct();
   mMacToLink.erase(it);
   FD_CLR(wireSocket,  &mFdSet);
 }
@@ -187,7 +229,17 @@ void Node::sendRandomFrames(MacSublayer* pMacSublayer)
   Frame fr0(0);
   Frame fr2(2);
   Frame fr3(3);
-  pMacSublayer->fromLinkLayer(BROADCAST_MAC, fr0);
-  pMacSublayer->fromLinkLayer(0xaa004499bb32, fr3);
-  pMacSublayer->fromLinkLayer(0x003344221122, fr2);
+  pMacSublayer->fromLinkLayer(BROADCAST_MAC, &fr0);
+  pMacSublayer->fromLinkLayer(0xaa004499bb32, &fr3);
+  pMacSublayer->fromLinkLayer(0x003344221122, &fr2);
+}
+
+void Node::sendRandomPackets(LinkLayer* pLinkLayer)
+{
+  Byte foo[2];
+  pLinkLayer->fromNetworkLayer(BROADCAST_MAC, NULL, 0);
+  if (mMacAddress == 0x003344221122)
+    pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
+    else
+  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
 }

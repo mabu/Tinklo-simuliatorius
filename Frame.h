@@ -9,7 +9,7 @@ struct Frame
   Frame(FrameLength frameLength):
     length(frameLength)
   {
-    data = new Byte[frameLength];
+    if (frameLength > 0) data = new Byte[frameLength];
   }
 
   ~Frame()
