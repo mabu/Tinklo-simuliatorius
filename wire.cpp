@@ -87,7 +87,7 @@ bool disconnect_node(const char* node)
 void send_signal(int sender, char valueToSend)
 {
   printf("Siunčiama reikšmė: %hhd\n", valueToSend);
-  for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+  for (auto it = gSocketToName.begin(); it != gSocketToName.end();)
   {
     if (it->first != sender)
     {
@@ -96,10 +96,11 @@ void send_signal(int sender, char valueToSend)
         if (errno == ECONNRESET || errno == EPIPE)
         {
           printf("Besiunčiant atsijungė mazgas %s\n", it->second.c_str());
-          if (!disconnect_node(it->second.c_str()))
+          if (!disconnect_node((it++)->second.c_str()))
           {
             perror("Klaida užbaigiant ryšį");
           }
+          continue;
         } else {
           perror("Klaida siunčiant");
           printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
@@ -107,6 +108,7 @@ void send_signal(int sender, char valueToSend)
       }
       else printf("Nusiųsta į %s\n", it->second.c_str());
     }
+    ++it;
   }
 }
 
@@ -154,7 +156,7 @@ int main(int argc, char* argv[])
     // paimame siunčiamus signalus
     char valueToSend = 0;
     int sender = 0;
-    for (auto it = gSocketToName.begin(); it != gSocketToName.end(); it++)
+    for (auto it = gSocketToName.begin(); it != gSocketToName.end();)
     {
       if (FD_ISSET(it->first, &tempFdSet))
       {
@@ -165,16 +167,18 @@ int main(int argc, char* argv[])
         {
           printf("Atsijungė mazgas %s\n", it->second.c_str());
           if (sender > 0) sender = 0;
-          if (!disconnect_node(it->second.c_str()))
+          if (!disconnect_node((it++)->second.c_str()))
           {
             perror("Klaida užbaigiant ryšį");
           }
+          continue;
         }
         else
         {
           valueToSend += volts;
         }
       }
+      it++;
     }
 
     // siunčiame
