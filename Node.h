@@ -74,6 +74,16 @@ class Node
      */
     bool toPhysicalLayer(MacSublayer* pMacSublayer, char voltage);
 
+    /**
+     * Patikrina, ar laidu neateina duomenys.
+     * Fizinio lygio teikiama paslauga MAC polygiui kolizijų prevencijai.
+     *
+     * @param pMacSublayer besikreipiantis MAC polygis
+     * @return true, jei laidas prijungtas ir pasyvus; false, jei kinta laido
+     *         įtampą arba laidas atjungtas
+     */
+    bool isWireIdle(MacSublayer* pMacSublayer);
+
     void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                      Frame& rFrame);
     void toNetworkLayer(MacAddress source, Byte* packet,

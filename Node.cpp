@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <poll.h>
 
 #define MILLION 1000000
 
@@ -193,6 +194,23 @@ bool Node::toPhysicalLayer(MacSublayer* pMacSublayer, char voltage)
   return false;
 }
 
+bool Node::isWireIdle(MacSublayer* pMacSublayer)
+{
+  auto it = mMacSublayerToSocket.find(pMacSublayer);
+  if (it == mMacSublayerToSocket.end())
+  {
+    printf("Laidas atsijungė prieš patikrinant jo aktyvumą.\n");
+    return false;
+  }
+  pollfd pollFd;
+  pollFd.fd = it->second;
+  pollFd.events = POLLIN | POLLPRI | POLLRDHUP;
+  int result = poll(&pollFd, 1, 1);
+  if (result == 0) return true;
+  else if (result == -1) perror("Klaida tikrinant laido aktyvumą");
+  return false;
+}
+
 void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                        Frame& rFrame)
 {
@@ -238,8 +256,9 @@ void Node::sendRandomFrames(MacSublayer* pMacSublayer)
 
 void Node::sendRandomPackets(LinkLayer* pLinkLayer)
 {
+  if (mMacAddress == 0xaa004499bb32) return;
   Byte foo[2] = {3, 14};
-  pLinkLayer->fromNetworkLayer(BROADCAST_MAC, NULL, 0);
   pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
-  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
+  pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
+//  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
 }

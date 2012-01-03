@@ -94,6 +94,7 @@ class MacSublayer: public Layer
     bool sendBit(bool bit);
     void calculateChecksum(BitVector& bufferWithChecksum);
     bool isInputValid();
+    bool toPhysicalLayer(char voltage);
     void receivedBit(bool bit);
 
     /**

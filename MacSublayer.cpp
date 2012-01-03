@@ -8,8 +8,7 @@
                               + max(MIN_DATA_LENGTH, mLength) * 8 \
                               + CHECKSUM_LENGTH
 
-#define TO_PHYSICAL_LAYER(x) if (!mpNode->toPhysicalLayer(this, (x))) \
-                               return false;
+#define TO_PHYSICAL_LAYER(x) if (!toPhysicalLayer(x)) return false;
 
 MacSublayer::MacSublayer(Node* pNode):
   Layer(pNode),
@@ -175,6 +174,7 @@ void MacSublayer::bufferChecksum()
 
 bool MacSublayer::sendPreamble()
 {
+  if (!mpNode->isWireIdle(this)) return false;
   TO_PHYSICAL_LAYER(NEGATIVE_VOLTAGE);
   TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
   for (int i = 0; i < 6; i++)
@@ -189,6 +189,7 @@ bool MacSublayer::sendPreamble()
 
 bool MacSublayer::sendBit(bool bit)
 {
+  if (!mpNode->isWireIdle(this)) return false;
   if (bit)
   {
     TO_PHYSICAL_LAYER(POSITIVE_VOLTAGE);
@@ -233,6 +234,21 @@ bool MacSublayer::isInputValid()
       info("Gauti duomenys sugadinti.\n");
       return false;
     }
+  }
+  return true;
+}
+
+bool MacSublayer::toPhysicalLayer(char voltage)
+{
+  if (!mpNode->isWireIdle(this))
+  {
+    info("Siuntimas atšauktas, kadangi pastebėta įtampa laide.\n");
+    return false;
+  }
+  if (!mpNode->toPhysicalLayer(this, voltage))
+  {
+    info("Siuntimas neįvyko, kadangi laidas atsijungė.\n");
+    return false;
   }
   return true;
 }
