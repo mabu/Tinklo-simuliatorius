@@ -51,7 +51,7 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
   if (controlByte.type == 2)
   {
     info("Gautas visiems skirtas kadras nuo %llx.\n", source);
-    mpNode->toNetworkLayer(rFrame.data + 1, rFrame.length - 1);
+    mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
     return;
   }
   Connection& rConnection = mConnections[source];
@@ -74,9 +74,7 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
       info("%llx patvirtino prisijungimą.\n", source);
       rConnection.controlByte.type = 1;
       rConnection.controlByte.ack++;
-      rConnection.controlByte.seq++;
-      delete rConnection.framePtrQueue.front();
-      rConnection.framePtrQueue.pop_front();
+      gotAck(rConnection);
       toMacSublayer(source, &rConnection);
     }
     else info("%llx nepatvirtino prisijungimo, bet kažką siuntė.\n", source);
@@ -96,7 +94,7 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
         info("Naujas kadras nuo %llx.\n", source);
       }
       else info("%llx nepatvirtino, tačiau atsiuntė naują kadrą.\n", source);
-      mpNode->toNetworkLayer(rFrame.data + 1, rFrame.length - 1);
+      mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
     }
     else info("%llx nepatvirtino ir atsiuntė seną kadrą.\n", source);
     if (rFrame.length > 1) needsAck(source, &rConnection);
@@ -104,47 +102,37 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
   }
   else if (--(controlByte.ack) == rConnection.controlByte.seq)
   { // patvirtino
-    if (rConnection.framePtrQueue.empty())
-    {
-      info("%llx patvirtino, nors patvirtinimo nelaukė jog kadras.\n", source);
-    }
-    else
-    {
-      if (rConnection.controlByte == 1) rConnection.controlByte.type = 1;
-      rConnection.controlByte.seq++;
-      delete rConnection.framePtrQueue.front();
-      rConnection.framePtrQueue.pop_front();
-      rConnection.timer = 0;
-      rConnection.timeouts = 0;
-      if (controlByte.seq == rConnection.controlByte.ack)
-      { // naujas kadras
-        if (rFrame.length > 1)
-        {
-          info("%llx patvirtino ir atsiuntė naują kadrą.\n", source);
-          rConnection.controlByte.ack++;
-          needsAck(source, &rConnection);
-        }
-        else
-        {
-          info("%llx nurodė naują Seq, tačiau paketo neatsiuntė.\n", source);
-        }
-      }
-      else if (rFrame.length > 1)
+    if (rConnection.controlByte == 1) rConnection.controlByte.type = 1;
+    gotAck(rConnection);
+    if (controlByte.seq == rConnection.controlByte.ack)
+    { // naujas kadras
+      if (rFrame.length > 1)
       {
-        info("%llx pridėjo paketą, nors pagal Seq jo neturėjo būti.\n", source);
+        info("%llx patvirtino ir atsiuntė naują kadrą.\n", source);
+        rConnection.controlByte.ack++;
+        needsAck(source, &rConnection);
       }
       else
       {
-        if (rConnection.framePtrQueue.empty())
-        {
-          info ("%llx patvirtino ir nieko neatsiuntė. Eilė tuščia.\n", source);
-        }
-        else
-        {
-          info("%llx patvirtino ir nieko atsiuntė. Eilėje dar %u kadrų.\n",
-               source, rConnection.framePtrQueue.size());
-          toMacSublayer(source, &rConnection);
-        }
+        info("%llx nurodė naują Seq, tačiau paketo neatsiuntė.\n", source);
+      }
+      mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
+    }
+    else if (rFrame.length > 1)
+    {
+      info("%llx pridėjo paketą, nors pagal Seq jo neturėjo būti.\n", source);
+    }
+    else
+    {
+      if (rConnection.framePtrQueue.empty())
+      {
+        info ("%llx patvirtino ir nieko neatsiuntė. Eilė tuščia.\n", source);
+      }
+      else
+      {
+        info("%llx patvirtino ir nieko atsiuntė. Eilėje dar %u kadrų.\n",
+             source, rConnection.framePtrQueue.size());
+        toMacSublayer(source, &rConnection);
       }
     }
   }
@@ -214,7 +202,8 @@ void LinkLayer::startTimer(MacAddress destination, Connection* pConnection,
     pConnection->lastDuration = MAX_FRAME_TIMEOUT;
   }
   ++(pConnection->timeouts);
-  info("Patvirtinimo lauksim %d ms.\n", pConnection->lastDuration);
+  info("Patvirtinimo lauks %d ms (%d bandymas).\n", pConnection->lastDuration,
+       pConnection->timeouts);
   mpNode->startTimer(this, pConnection->lastDuration, mTimersStarted);
 }
 
@@ -228,14 +217,13 @@ void LinkLayer::toMacSublayer(MacAddress destination, Connection* pConnection)
 {
   if (pConnection->framePtrQueue.empty()) // reikia siųsti tik Ack
   {
-    pConnection->framePtrQueue.push_back(new Frame(1));
-    Frame* pFrame = pConnection->framePtrQueue.front();
+    Frame ackFrame(1);
     ControlByte controlByte = pConnection->controlByte;
     controlByte.seq--;
-    pFrame->data[0] = controlByte;
+    ackFrame.data[0] = controlByte;
     info("Siunčia Ack į %llx (tipas %hhu, Seq %hhu, Ack %hhu)\n", destination,
          controlByte.type, controlByte.seq, controlByte.ack);
-    mpMacSublayer->fromLinkLayer(destination, pFrame);
+    mpMacSublayer->fromLinkLayer(destination, &ackFrame);
   }
   else
   {
@@ -277,4 +265,18 @@ void LinkLayer::needsAck(MacAddress destination, Connection* pConnection)
     info("Prie Ack prikabinam kadrą eilėje.\n");
     toMacSublayer(destination, pConnection);
   }
+}
+
+void LinkLayer::gotAck(Connection& rConnection)
+{
+  if (rConnection.framePtrQueue.empty())
+  {
+    info("Patvirtino, nors eilė tuščia.\n");
+    return;
+  }
+  rConnection.controlByte.seq++;
+  delete rConnection.framePtrQueue.front();
+  rConnection.framePtrQueue.pop_front();
+  rConnection.timer = 0;
+  rConnection.timeouts = 0;
 }

@@ -254,7 +254,7 @@ void MacSublayer::receivedBit(bool bit)
     }
     if (destination != mpNode->macAddress() && destination != BROADCAST_MAC)
     {
-      info("Pastebėtas kitam gavėjui (%llx, ne %llx) skirtas paketas.\n",
+      info("Pastebėtas kitam gavėjui (%llx, ne %llx) skirtas kadras.\n",
            destination, mpNode->macAddress());
       mReceivingData = false;
     }

@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
       printf("Prie mazgo %s jau buvo prisijungta.\n", argv[i]);
       continue;
     }
-    printf("Jungiamasi prie mazgo %s", argv[i]);
+    printf("Jungiamasi prie mazgo %s\n", argv[i]);
     if (false == connect_node(argv[i]))
     {
       perror("Nepavyko prisijungti prie mazgo");

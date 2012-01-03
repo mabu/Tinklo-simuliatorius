@@ -8,10 +8,10 @@
 
 #define ACK_TIMEOUT           100
 #define MIN_FRAME_TIMEOUT    1000LL
-#define MAX_FRAME_TIMEOUT    5000LL
+#define MAX_FRAME_TIMEOUT   10000LL
 #define FRAME_TIMEOUT_DECR     50LL
 #define MAX_FRAME_QUEUE_SIZE   10
-#define MAX_RETRIES             5
+#define MAX_RETRIES            10
 
 class Node;
 class MacSublayer;
@@ -99,19 +99,19 @@ class LinkLayer: public Layer
         timer(0),
         timeouts(0),
         lastDuration(MIN_FRAME_TIMEOUT)
-       {
-         framePtrQueue.push_back(new Frame(1)); // VALGRIND
-         framePtrQueue.back()->data[0] = ControlByte();
-       }
+      {
+        framePtrQueue.push_back(new Frame(1)); // VALGRIND
+        framePtrQueue.back()->data[0] = ControlByte();
+      }
 
-       ~Connection()
-       {
-         while (!framePtrQueue.empty())
-         {
-           delete framePtrQueue.back();
-           framePtrQueue.pop_back();
-         }
-       }
+      ~Connection()
+      {
+        while (!framePtrQueue.empty())
+        {
+          delete framePtrQueue.back();
+          framePtrQueue.pop_back();
+        }
+      }
     };
 
   private:
@@ -141,6 +141,7 @@ class LinkLayer: public Layer
     void startTimer(MacAddress destination, Connection* pConnection,
                     bool ack = false);
     void needsAck(MacAddress destination, Connection* pConnection);
+    void gotAck(Connection& rConnection);
 };
 
 #endif

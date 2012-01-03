@@ -58,8 +58,8 @@ Node::~Node()
 void Node::layerMessage(const char* layerName, const char* format, va_list vl)
 {
   timespec current;
-  clock_gettime(CLOCK_MONOTONIC, &current);
-  printf("[%ld.%ld] %s: ", current.tv_sec, current.tv_nsec, layerName);
+  clock_gettime(CLOCK_REALTIME, &current);
+  printf("[%ld.%09ld] %s: ", current.tv_sec, current.tv_nsec, layerName);
   vprintf(format, vl);
 }
 
@@ -199,9 +199,11 @@ void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
   mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, rFrame);
 }
 
-void Node::toNetworkLayer(Byte* packet, FrameLength packetLength)
+void Node::toNetworkLayer(MacAddress source, Byte* packet,
+                          FrameLength packetLength)
 {
-  printf("Tinklo lygiui keliaus %hu ilgio paketas.\n", packetLength);
+  printf("Tinklo lygiui keliaus %hu ilgio paketas nuo %llx.\n", packetLength,
+         source);
   // TODO
 }
 
@@ -236,7 +238,7 @@ void Node::sendRandomFrames(MacSublayer* pMacSublayer)
 
 void Node::sendRandomPackets(LinkLayer* pLinkLayer)
 {
-  Byte foo[2];
+  Byte foo[2] = {3, 14};
   pLinkLayer->fromNetworkLayer(BROADCAST_MAC, NULL, 0);
   pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
   pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
