@@ -1,6 +1,9 @@
 #ifndef FRAME_H
 #define FRAME_H
+
 #include "types.h"
+#include <cstring>
+
 struct Frame
 {
   Byte*       data;
@@ -15,6 +18,13 @@ struct Frame
   ~Frame()
   {
     delete[] data;
+  }
+
+  Frame(const Frame& rFrame)
+  {
+    length = rFrame.length;
+    data = new Byte[length];
+    memcpy(data, rFrame.data, sizeof(Byte) * length);
   }
 };
 

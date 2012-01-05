@@ -256,9 +256,7 @@ void Node::sendRandomFrames(MacSublayer* pMacSublayer)
 
 void Node::sendRandomPackets(LinkLayer* pLinkLayer)
 {
-  if (mMacAddress == 0xaa004499bb32) return;
   Byte foo[2] = {3, 14};
   pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
-  pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
-//  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
+  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
 }

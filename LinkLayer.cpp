@@ -148,7 +148,13 @@ bool LinkLayer::fromNetworkLayer(MacAddress destination, Byte* packet,
   if (packetLength > MAX_DATA_LENGTH - 1)
   {
     info("Paketas per didelis.\n");
+    mpNode->toNetworkLayer(destination, packet, packetLength);
     return false;
+  }
+  if (destination == mpNode->macAddress())
+  {
+    info("Siuntėjas lygus gavėjui. Siunčiama atgal į tinklo lygį.\n");
+    return true;
   }
   Connection& rConnection = mConnections[destination];
   if (destination == BROADCAST_MAC && !rConnection.framePtrQueue.empty())
