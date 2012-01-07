@@ -97,9 +97,6 @@ class Node
      * @param pMacSublayer rodyklė į MAC polygį, susietą su laidu
      */
     void removeLink(int wireSocket, MacSublayer* pMacSublayer);
-
-    void sendRandomFrames(MacSublayer* pMacSublayer); // testavimui
-    void sendRandomPackets(LinkLayer* pLinkLayer);    // testavimui
 };
 
 #endif

@@ -160,8 +160,6 @@ void Node::run()
       mMacSublayerToSocket.insert(make_pair(pMacSublayer, wireSocket));
       mNetworkLayer.addLink(pLinkLayer);
       FD_SET(wireSocket,  &mFdSet);
-      //sendRandomFrames(pMacSublayer);
-      sendRandomPackets(pLinkLayer);
     }
 //    if (FD_ISSET(mAppSocket,  &tempFdSet))
 
@@ -242,21 +240,4 @@ void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
   it->second->selfDestruct();
   mMacToLink.erase(it);
   FD_CLR(wireSocket,  &mFdSet);
-}
-
-void Node::sendRandomFrames(MacSublayer* pMacSublayer)
-{
-  Frame fr0(0);
-  Frame fr2(2);
-  Frame fr3(3);
-  pMacSublayer->fromLinkLayer(BROADCAST_MAC, &fr0);
-  pMacSublayer->fromLinkLayer(0xaa004499bb32, &fr3);
-  pMacSublayer->fromLinkLayer(0x003344221122, &fr2);
-}
-
-void Node::sendRandomPackets(LinkLayer* pLinkLayer)
-{
-  Byte foo[2] = {3, 14};
-  pLinkLayer->fromNetworkLayer(0xaa004499bb32, foo, 2);
-  pLinkLayer->fromNetworkLayer(0x003344221122, foo, 1);
 }
