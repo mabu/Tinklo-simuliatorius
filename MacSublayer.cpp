@@ -105,13 +105,6 @@ bool MacSublayer::fromLinkLayer(MacAddress destination, Frame* pFrame)
          MAX_DATA_LENGTH);
     return false;
   }
-  if (destination == mpNode->macAddress())
-  {
-    info("Gavėjas lygus siuntėjui. Siunčiama atgal į kanalinį lygį.\n");
-    Frame copy(*pFrame);
-    mpNode->toLinkLayer(this, destination, copy);
-    return true;
-  }
   info("Siunčia %hu ilgio kadrą į %llx:\n", pFrame->length, destination);
   dumpFrame(*pFrame);
   mOutputBuffer.clear();
