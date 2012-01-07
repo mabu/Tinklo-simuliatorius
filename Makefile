@@ -6,9 +6,10 @@ SOURCES=common.cpp         \
         NetworkLayer.cpp   \
         Node.cpp           \
         TransportLayer.cpp \
+        types.cpp          \
 
 OBJECTS=$(SOURCES:.cpp=.o)
-HEADERS=$(SOURCES:.cpp=.h) types.h Frame.h
+HEADERS=$(SOURCES:.cpp=.h) Frame.h
 
 all: wire node
 

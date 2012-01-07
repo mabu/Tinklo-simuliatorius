@@ -86,7 +86,7 @@ bool disconnect_node(const char* node)
 
 void send_signal(int sender, char valueToSend)
 {
-  printf("Siunčiama reikšmė: %hhd\n", valueToSend);
+  //printf("Siunčiama reikšmė: %hhd\n", valueToSend);
   for (auto it = gSocketToName.begin(); it != gSocketToName.end();)
   {
     if (it->first != sender)
@@ -106,7 +106,7 @@ void send_signal(int sender, char valueToSend)
           printf("Nepavyko nusiųsti į mazgą %s\n", it->second.c_str());
         }
       }
-      else printf("Nusiųsta į %s\n", it->second.c_str());
+      //else printf("Nusiųsta į %s\n", it->second.c_str());
     }
     ++it;
   }

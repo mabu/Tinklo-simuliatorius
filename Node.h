@@ -86,8 +86,6 @@ class Node
 
     void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                      Frame& rFrame);
-    void toNetworkLayer(MacAddress source, Byte* packet,
-                        FrameLength packetLength);
 
   private:
     /**

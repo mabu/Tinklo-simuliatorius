@@ -15,6 +15,7 @@
 
 class Node;
 class MacSublayer;
+class NetworkLayer;
 
 /**
  * Kanalinis lygis.
@@ -116,6 +117,7 @@ class LinkLayer: public Layer
 
   private:
     MacSublayer*                                             mpMacSublayer;
+    NetworkLayer*                                            mpNetworkLayer;
     unordered_map<MacAddress, Connection>                    mConnections;
     unsigned long long                                       mTimersStarted;
     unsigned long long                                       mTimersFinished;
@@ -125,7 +127,8 @@ class LinkLayer: public Layer
     bool                                                     mIsZombie : 1;
 
   public:
-    LinkLayer(Node* pNode, MacSublayer* pMacSublayer);
+    LinkLayer(Node* pNode, MacSublayer* pMacSublayer,
+              NetworkLayer* pNetworkLayer);
     void timer(long long id); // žr. Layer.h
     bool fromNetworkLayer(MacAddress destination, Byte* packet,
                           FrameLength packetLength);

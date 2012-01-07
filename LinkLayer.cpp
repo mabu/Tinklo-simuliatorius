@@ -3,9 +3,11 @@
 #include <cstdlib>
 #include <cstring>
 
-LinkLayer::LinkLayer(Node* pNode, MacSublayer* pMacSublayer):
+LinkLayer::LinkLayer(Node* pNode, MacSublayer* pMacSublayer,
+                     NetworkLayer* pNetworkLayer):
   Layer(pNode),
   mpMacSublayer(pMacSublayer),
+  mpNetworkLayer(pNetworkLayer),
   mTimersStarted(0),
   mTimersFinished(0),
   mLastDestination(-1),
@@ -51,7 +53,8 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
   if (controlByte.type == 2)
   {
     info("Gautas visiems skirtas kadras nuo %llx.\n", source);
-    mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
+    mpNetworkLayer->fromLinkLayer(this, source, rFrame.data + 1,
+                                    rFrame.length - 1);
     return;
   }
   Connection& rConnection = mConnections[source];
@@ -94,7 +97,8 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
         info("Naujas kadras nuo %llx.\n", source);
       }
       else info("%llx nepatvirtino, tačiau atsiuntė naują kadrą.\n", source);
-      mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
+      mpNetworkLayer->fromLinkLayer(this, source, rFrame.data + 1,
+                                    rFrame.length - 1);
     }
     else info("%llx nepatvirtino ir atsiuntė seną kadrą.\n", source);
     if (rFrame.length > 1) needsAck(source, &rConnection);
@@ -116,7 +120,8 @@ void LinkLayer::fromMacSublayer(MacAddress source, Frame& rFrame)
       {
         info("%llx nurodė naują Seq, tačiau paketo neatsiuntė.\n", source);
       }
-      mpNode->toNetworkLayer(source, rFrame.data + 1, rFrame.length - 1);
+      mpNetworkLayer->fromLinkLayer(this, source, rFrame.data + 1,
+                                    rFrame.length - 1);
     }
     else if (rFrame.length > 1)
     {

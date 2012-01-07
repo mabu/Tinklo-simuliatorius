@@ -132,6 +132,7 @@ int main(int argc, char* argv[])
     printf(USAGE_INFO);
     return 1;
   }
+  ipAddress = ntohl(ipAddress);
   strcpy(gWireSocketName, argv[1]);
   strcpy(gAppSocketName,  argv[1]);
   strcat(gAppSocketName,  ".app");

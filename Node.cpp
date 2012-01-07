@@ -7,25 +7,10 @@
 #include <sys/socket.h>
 #include <poll.h>
 
-#define MILLION 1000000
-
 bool operator < (const timespec& a, const timespec& b)
 {
   if (a.tv_sec == b.tv_sec) return a.tv_nsec < b.tv_nsec;
   else return a.tv_sec < b.tv_sec;
-}
-
-timespec operator - (const timespec& a, const timespec& b)
-{
-  timespec result = a;
-  result.tv_sec -= b.tv_sec;
-  result.tv_nsec -= b.tv_nsec;
-  if (result.tv_nsec < 0)
-  {
-    result.tv_nsec += 1000 * MILLION;
-    --result.tv_sec;
-  }
-  return result;
 }
 
 Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
@@ -58,6 +43,7 @@ Node::~Node()
 
 void Node::layerMessage(const char* layerName, const char* format, va_list vl)
 {
+  if (strcmp(layerName, "Tinklo lygis")) return;
   timespec current;
   clock_gettime(CLOCK_REALTIME, &current);
   printf("[%ld.%09ld] %s: ", current.tv_sec, current.tv_nsec, layerName);
@@ -154,7 +140,8 @@ void Node::run()
         break;
       }
       MacSublayer* pMacSublayer = new MacSublayer(this);
-      LinkLayer*   pLinkLayer   = new LinkLayer(this, pMacSublayer);
+      LinkLayer*   pLinkLayer   = new LinkLayer(this, pMacSublayer,
+                                                &mNetworkLayer);
       mMacToLink.insert(make_pair(pMacSublayer, pLinkLayer));
       mSocketToMacSublayer.insert(make_pair(wireSocket, pMacSublayer));
       mMacSublayerToSocket.insert(make_pair(pMacSublayer, wireSocket));
@@ -213,14 +200,6 @@ void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                        Frame& rFrame)
 {
   mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, rFrame);
-}
-
-void Node::toNetworkLayer(MacAddress source, Byte* packet,
-                          FrameLength packetLength)
-{
-  printf("Tinklo lygiui keliaus %hu ilgio paketas nuo %llx.\n", packetLength,
-         source);
-  // TODO
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
