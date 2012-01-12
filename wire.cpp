@@ -19,6 +19,7 @@
 #include "common.h"
 
 #define CHEAT "siųsk " // parašius po šito vieną simbolį, jį išsiunčia laidu
+#define SEND_BUFFER_SIZE 10000000 // lizdų siuntimo buferių dydžiai baitais
 
 using namespace std;
 
@@ -51,6 +52,11 @@ void close_and_exit(int sig = 0)
 bool connect_node(char* node)
 {
   int nodeSocket = socket(AF_UNIX, SOCK_STREAM, 0);
+  unsigned size = SEND_BUFFER_SIZE;
+  if (0 != setsockopt(nodeSocket, SOL_SOCKET, SO_SNDBUF, &size, sizeof(size)))
+  {
+    perror("setsockopt SO_SNDBUF");
+  }
   if (nodeSocket == -1) return false;
   sockaddr_un addr;
   addr.sun_family = AF_UNIX;
