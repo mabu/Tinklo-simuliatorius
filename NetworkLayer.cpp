@@ -10,35 +10,15 @@
 NetworkLayer::NetworkLayer(Node* pNode):
   Layer(pNode),
   mLastTimerId(0)
-{ }
+{
+  startTimer(LS_PERIOD, TimerType::SEND_LS, NULL);
+}
 
 void NetworkLayer::timer(long long id)
 {
   auto timerIt = mTimers.find(id);
-  if (timerIt == mTimers.end()
-      || mLinks.find(timerIt->second.second) == mLinks.end()) return; // atjungtas
-  if (timerIt->second.first == TimerType::SEND_ARP)
-  {
-    Header header;
-    header.protocol = ARP_PROTOCOL;
-    header.ttl = 0;
-    header.id = 0;
-    header.length = ARP_LENGTH;
-    header.offset = 0;
-    header.source = mpNode->ipAddress();
-    header.destination = BROADCAST_IP;
-    Byte packet[sizeof(Header) + header.length];
-    header.toBytes(packet);
-    packet[sizeof(Header)] = 0;
-    timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    memcpy(packet + sizeof(Header) + 1, &time, sizeof(timespec));
-    timerIt->second.second->fromNetworkLayer(BROADCAST_MAC, packet,
-                                             sizeof(Header) + header.length);
-    info("Išsiuntė ARP užklausą.\n");
-    startTimer(LS_DELTA, TimerType::SEND_LS, timerIt->second.second);
-  }
-  else if (timerIt->second.first == TimerType::SEND_LS)
+  if (timerIt == mTimers.end()) return; // atjungtas
+  if (timerIt->second.first == TimerType::SEND_LS)
   {
     info("Siųs LS.\n");
     timespec current;
@@ -73,12 +53,42 @@ void NetworkLayer::timer(long long id)
     for (auto destinationIp : mSpanningTree)
     {
       it = mArpCache.find(destinationIp);
-      it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress, packet,
-                                              packetLength);
-      info("Išsiųstas LS į %llx.\n", it->second.macAddress);
+      if (it != mArpCache.end())
+      {
+        it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress, packet,
+                                                packetLength);
+        info("Išsiųstas LS į %llx.\n", it->second.macAddress);
+      }
+      else
+      {
+        info("Nepersiųsta į %x, nes podėlyje nerastas MAC adresas.\n",
+             destinationIp);
+      }
     }
-    startTimer(max(0, ARP_PERIOD - LS_DELTA), TimerType::SEND_ARP,
-               timerIt->second.second);
+    startTimer(LS_PERIOD, TimerType::SEND_LS, NULL);
+  }
+  else if (mLinks.find(timerIt->second.second) == mLinks.end()) return;
+
+  if (timerIt->second.first == TimerType::SEND_ARP)
+  {
+    Header header;
+    header.protocol = ARP_PROTOCOL;
+    header.ttl = 0;
+    header.id = 0;
+    header.length = ARP_LENGTH;
+    header.offset = 0;
+    header.source = mpNode->ipAddress();
+    header.destination = BROADCAST_IP;
+    Byte packet[sizeof(Header) + header.length];
+    header.toBytes(packet);
+    packet[sizeof(Header)] = 0;
+    timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    memcpy(packet + sizeof(Header) + 1, &time, sizeof(timespec));
+    timerIt->second.second->fromNetworkLayer(BROADCAST_MAC, packet,
+                                             sizeof(Header) + header.length);
+    info("Išsiuntė ARP užklausą.\n");
+    startTimer(ARP_PERIOD, TimerType::SEND_ARP, timerIt->second.second);
   }
   mTimers.erase(timerIt);
 }
@@ -178,7 +188,6 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
       info("Gauti seni mazgo %x duomenys.\n", header.source);
     }
   }
-  else info("Protokolas: %hhu\n", header.protocol);
 }
 
 void NetworkLayer::startTimer(int timeout, TimerType timerType,
@@ -190,15 +199,23 @@ void NetworkLayer::startTimer(int timeout, TimerType timerType,
 
 void NetworkLayer::kruskal()
 {
+  timespec current;
+  clock_gettime(CLOCK_MONOTONIC, &current);
   mSpanningTree.clear();
   vector<pair<unsigned, pair<unsigned, unsigned> > > edges;
-  for (auto& node : mNodes)
+  for (auto it = mNodes.begin(); it != mNodes.end();)
   {
-    node.second.kruskalSet = node.first;
-    for (auto& edge : node.second.neighbours)
+    if (it->second.timeout < current)
     {
-      edges.push_back(make_pair(edge.second, make_pair(node.first, edge.first)));
+      mNodes.erase(it++);
+      continue;
     }
+    it->second.kruskalSet = it->first;
+    for (auto& edge : it->second.neighbours)
+    {
+      edges.push_back(make_pair(edge.second, make_pair(it->first, edge.first)));
+    }
+    ++it;
   }
   sort(edges.begin(), edges.end());
   for (auto& edge : edges)
@@ -220,7 +237,7 @@ void NetworkLayer::kruskal()
       }
     }
   }
-  info("Atnaujintas minimalus jungiamasis medis.\n");
+  info("Atnaujintas minimalus jungiamasis medis (%u).\n", mSpanningTree.size());
 }
 
 unsigned NetworkLayer::kruskalSetOf(unsigned node)

@@ -11,7 +11,7 @@
 #define ARP_PERIOD      20000
 #define ARP_TIMEOUT    100000
 #define LS_PROTOCOL         1
-#define LS_DELTA        10000 // turi būti mažesnis už ARP_PERIOD
+#define LS_PERIOD       20000
 #define LS_TIMEOUT     500000
 #define PACKET_TIMEOUT 500000
 #define MAX_FRAME_SIZE   1499
@@ -46,10 +46,9 @@ class LinkLayer;
  * milisekundžių BROADCAST_IP adresu visiems kaimynams išsiunčia ARP užklausą
  * su periodo pradžios laiko momento identifikatoriumi. Gavęs ARP atsakymus su
  * teisingu identifikatoriumi, išsisaugo jų siuntimo ir gavimo laiką.
- * Po kiekvienos periodinės ARP užklausos praėjus LS_DELTA milisekundžių
- * kaimynai, iš kurių atsakymas gautas seniau nei prieš ARP_TIMEOUT
- * milisekundžių, ištrinami iš sąrašo, o iš likusių suformuojamas LS paketas
- * ir išsiunčiamas BROADCAST_IP adresu.
+ * Periodiškai kas LS_PERIOD milisekundžių kaimynai, iš kurių atsakymas gautas
+ * seniau nei prieš ARP_TIMEOUT milisekundžių, ištrinami iš sąrašo, o iš likusių
+ * suformuojamas LS paketas ir išsiunčiamas BROADCAST_IP adresu.
  * Periodinių ARP paketų siuntimas kiekvienu kanalu prasideda (ir vyksta)
  * skirtingu laiku. Pirmasis paketas išsiunčiamas praėjus atsitiktiniam
  * laikui iš intervalo [0; ARP_STARTED) milisekundėmis po laido prijungimo.
@@ -160,7 +159,13 @@ class NetworkLayer: public Layer
       vector<pair<int, int> > neighbours; // kaimynų IP, atstumai iki jų
       unsigned                kruskalSet; // Kruskalo algoritmui
 
-      NodeInfo(): syn(0), kruskalSet(BROADCAST_IP) { }
+      NodeInfo():
+        syn(0),
+        kruskalSet(BROADCAST_IP)
+      {
+        timeout.tv_sec = 0;
+        timeout.tv_nsec = 0;
+      }
 
       bool update(Byte* data, int length)
       {

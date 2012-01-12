@@ -17,6 +17,7 @@ class LinkLayer;
 class Node
 {
   private:
+    multimap<timespec, pair<Layer*, long long> > mTimers;
     int                                          mWireSocket;
     int                                          mAppSocket;
     MacAddress                                   mMacAddress;
@@ -29,7 +30,6 @@ class Node
     unordered_map<int, int>                      mAppToSocket;
     unordered_map<MacSublayer*, LinkLayer*>      mMacToLink;
     fd_set                                       mFdSet;
-    multimap<timespec, pair<Layer*, long long> > mTimers;
 
   public:
     Node(int wireSocket, int appSocket, MacAddress macAddress,
