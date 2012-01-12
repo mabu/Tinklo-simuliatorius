@@ -29,6 +29,12 @@ void short_to_bytes(Byte* bytes, unsigned short num)
   bytes[1] = num & 0x00ff;
 }
 
+bool operator < (const timespec& a, const timespec& b)
+{
+  if (a.tv_sec == b.tv_sec) return a.tv_nsec < b.tv_nsec;
+  else return a.tv_sec < b.tv_sec;
+}
+
 timespec operator - (const timespec& a, const timespec& b)
 {
   timespec result = a;
@@ -40,4 +46,12 @@ timespec operator - (const timespec& a, const timespec& b)
     --result.tv_sec;
   }
   return result;
+}
+
+void add_milliseconds(timespec& rTime, int milliseconds)
+{
+  rTime.tv_sec  += milliseconds / 1000;
+  rTime.tv_nsec += milliseconds % 1000 * MILLION;
+  rTime.tv_sec += rTime.tv_nsec / (1000 * MILLION);
+  rTime.tv_nsec %= 1000 * MILLION;
 }

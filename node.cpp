@@ -53,6 +53,7 @@ void destroy_and_exit(int sig = 0)
     unlink(gAppSocketName);
   }
   if (gpNode != NULL) delete gpNode;
+  fclose(stdout);
   exit(!sig);
 }
 

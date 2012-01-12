@@ -1,14 +1,19 @@
 #ifndef NETWORKLAYER_H
 #define NETWORKLAYER_H
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include "types.h"
 #include "Layer.h"
 
+#define ARP_PROTOCOL        0
 #define ARP_STARTED      5000
 #define ARP_PERIOD      20000
+#define ARP_TIMEOUT    100000
+#define LS_PROTOCOL         1
 #define LS_DELTA        10000 // turi būti mažesnis už ARP_PERIOD
-#define PACKET_TIMEOUT 100000
+#define LS_TIMEOUT     500000
+#define PACKET_TIMEOUT 500000
 #define MAX_FRAME_SIZE   1499
 
 class Node;
@@ -18,8 +23,8 @@ class LinkLayer;
  * Tinklo polygis.
  *
  * Paketo struktūra.
- * Pirmas baitas – protokolas: 0 – ARP, 1 – LS, kiti – perduodami į transporto
- * lygį.
+ * Pirmas baitas – protokolas: ARP_PROTOCOL – ARP, LS_PROTOCOL – LS, kiti –
+ * perduodami į transporto lygį.
  * Antras baitas – TTL: kokiam kiekiui mazgų šis paketas dar gali būti
  * persiųstas (kaskart mažinama vienetu).
  * 3–4 baitai – paketo ID.
@@ -64,12 +69,12 @@ class LinkLayer;
  * bus pasirinktas kaimynas i lygi a_i / (a_1 + a_2 + ... + a_N).
  * Išimtis – siuntimas BROADCAST_IP adresu.
  * Gavus paketą, adresuotą BROADCAST_IP adresu, sudaromas minimalus jungiamasis
- * medis naudojant Primo algoritmą ir pradedant nuo siuntėjo. Svarbu, jog
- * gavus LS paketą pirmiau būtų perskaičiuojami atstumai, ir tik po to
- * formuojamas jungiamasis medis. Šis paketas, nepakeitus gavėjo adreso,
- * persiunčiamas visiems kaimynams, su kuriais yra jungiamojo medžio briauna,
- * išskyrus tą, nuo kurio paketas buvo gautas. Be to, jeigu paketas  nėra
- * tarnybinio protokolo, jis perduodamas transporto lygiui.
+ * medis naudojant Kruskalo algoritmą (arba naudojamas anksčiau sudarytas, jei
+ * grafas nepakito). Svarbu, jog gavus LS paketą pirmiau būtų perskaičiuojami
+ * atstumai, ir tik po to formuojamas jungiamasis medis. Šis paketas, nepakeitus
+ * gavėjo adreso, persiunčiamas visiems kaimynams, su kuriais yra jungiamojo
+ * medžio briauna, išskyrus tą, nuo kurio paketas buvo gautas. Be to, jeigu
+ * paketas nėra tarnybinio protokolo, jis perduodamas transporto lygiui.
  * Atstumų perskaičiavimas.
  * Pakitus briaunos svoriui iš X į Y (jei briauna susikuria, laikykime, kad
  * X lygus begalybei, o jei briauna išnyksta, kad Y lygus begalybei) Dijkstros
@@ -96,6 +101,7 @@ class NetworkLayer: public Layer
 {
   private:
     enum class TimerType: unsigned char { SEND_ARP, SEND_LS };
+
     struct Header
     {
       unsigned char  protocol;
@@ -130,10 +136,57 @@ class NetworkLayer: public Layer
       }
     };
 
+    struct ArpCache
+    {
+      MacAddress macAddress;
+      unsigned   responseTime;
+      timespec   timeout;
+      LinkLayer* pLinkLayer;
+
+      void update(MacAddress m, timespec& r, timespec& t, LinkLayer* p)
+      {
+        macAddress = m;
+        responseTime = r.tv_sec * 1000 + (r.tv_nsec + (MILLION / 2)) / MILLION;
+        timeout = t;
+        add_milliseconds(timeout, ARP_TIMEOUT);
+        pLinkLayer = p;
+      }
+    };
+
+    struct NodeInfo
+    {
+      unsigned                syn;        // LS paketo identifikatorius
+      timespec                timeout;    // duomenų galiojimo laikas
+      vector<pair<int, int> > neighbours; // kaimynų IP, atstumai iki jų
+      unsigned                kruskalSet; // Kruskalo algoritmui
+
+      NodeInfo(): syn(0), kruskalSet(BROADCAST_IP) { }
+
+      bool update(Byte* data, int length)
+      {
+        if (length < 12 || (length - 4) % 8 != 0 || bytes_to_int(data) <= syn)
+        {
+          return false;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &timeout);
+        add_milliseconds(timeout, LS_TIMEOUT);
+        neighbours.clear();
+        for (int i = 4; i < length; i += 8)
+        {
+          neighbours.push_back(make_pair(bytes_to_int(data + i),
+                                         bytes_to_int(data + i + 4)));
+        }
+        return true;
+      }
+    };
+
   private:
     unordered_set<LinkLayer*>                              mLinks;
     long long                                              mLastTimerId;
     unordered_map<long long, pair<TimerType, LinkLayer*> > mTimers;
+    unordered_map<unsigned, ArpCache>                      mArpCache;
+    unordered_set<unsigned>                                mSpanningTree;
+    unordered_map<unsigned, NodeInfo>                      mNodes;
 
   public:
     NetworkLayer(Node* pNode);
@@ -148,7 +201,9 @@ class NetworkLayer: public Layer
       { return "Tinklo lygis"; }
 
   private:
-    void startTimer(int timeout, TimerType timerType, LinkLayer* pLinkLayer);
+    void     startTimer(int timeout, TimerType timerType, LinkLayer* pLinkLayer);
+    void     kruskal();
+    unsigned kruskalSetOf(unsigned node);
 };
 
 #endif

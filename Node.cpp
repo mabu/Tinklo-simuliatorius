@@ -7,12 +7,6 @@
 #include <sys/socket.h>
 #include <poll.h>
 
-bool operator < (const timespec& a, const timespec& b)
-{
-  if (a.tv_sec == b.tv_sec) return a.tv_nsec < b.tv_nsec;
-  else return a.tv_sec < b.tv_sec;
-}
-
 Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
            IpAddress ipAddress):
   mWireSocket(wireSocket),
@@ -48,16 +42,14 @@ void Node::layerMessage(const char* layerName, const char* format, va_list vl)
   clock_gettime(CLOCK_REALTIME, &current);
   printf("[%ld.%09ld] %s: ", current.tv_sec, current.tv_nsec, layerName);
   vprintf(format, vl);
+  fflush(stdout);
 }
 
 void Node::startTimer(Layer* layer, int milliseconds, long long id)
 {
   timespec time;
   clock_gettime(CLOCK_MONOTONIC, &time);
-  time.tv_sec  += milliseconds / 1000;
-  time.tv_nsec += milliseconds % 1000 * MILLION;
-  time.tv_sec += time.tv_nsec / (1000 * MILLION);
-  time.tv_nsec %= 1000 * MILLION;
+  add_milliseconds(time, milliseconds);
   mTimers.insert(make_pair(time, make_pair(layer, id)));
 }
 

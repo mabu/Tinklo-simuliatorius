@@ -1,4 +1,4 @@
-FLAGS=-std=c++0x -Wall -g
+FLAGS=-std=c++0x -Wall -O2
 SOURCES=common.cpp         \
         Layer.cpp          \
         LinkLayer.cpp      \

@@ -18,6 +18,8 @@ void int_to_bytes(Byte* bytes, unsigned num);
 unsigned bytes_to_int(Byte* bytes);
 unsigned short bytes_to_short(Byte* bytes);
 void short_to_bytes(Byte* bytes, unsigned short num);
+bool operator < (const timespec& a, const timespec& b);
 timespec operator - (const timespec& a, const timespec& b);
+void add_milliseconds(timespec& rTime, int milliseconds);
 
 #endif
