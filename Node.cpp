@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <poll.h>
+#include <arpa/inet.h> // inet_pton
 
 Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
            IpAddress ipAddress):
@@ -19,6 +20,7 @@ Node::Node(int wireSocket, int appSocket, MacAddress macAddress,
   FD_ZERO(&mFdSet);
   FD_SET(mWireSocket, &mFdSet);
   FD_SET(mAppSocket,  &mFdSet);
+  FD_SET(0,           &mFdSet);
 }
 
 Node::~Node()
@@ -142,6 +144,26 @@ void Node::run()
     }
 //    if (FD_ISSET(mAppSocket,  &tempFdSet))
 
+    if (FD_ISSET(0, &tempFdSet))
+    {
+      char ipStr[4 * 4 + 1];
+      if (NULL != fgets(ipStr, sizeof(ipStr), stdin))
+      {
+        IpAddress ip;
+        ipStr[strlen(ipStr) - 1] = '\0'; // nuima \n
+        if (1 != inet_pton(AF_INET, ipStr, &ip))
+        {
+          perror("Netaisyklingas IP adresas");
+          printf("%s\n", ipStr);
+        }
+        else
+        {
+          printf("Siunčiama į tinklo lygį.\n");
+          mNetworkLayer.fromTransportLayer(ntohl(ip), NULL, 0);
+        }
+      }
+    }
+
     while (!mTimers.empty())
     {
       timespec current;
@@ -192,6 +214,12 @@ void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                        Frame& rFrame)
 {
   mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, rFrame);
+}
+
+void Node::toTransportLayer(IpAddress source, Byte* tpdu, unsigned length)
+{
+  printf("Transporto lygiui %d ilgio paketas.\n", length);
+  // TODO
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)

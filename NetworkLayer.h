@@ -15,6 +15,9 @@
 #define LS_TIMEOUT     500000
 #define PACKET_TIMEOUT 500000
 #define MAX_FRAME_SIZE   1499
+#define CONSTANT_WEIGTH  1000
+#define TRANSPORT_PROTOCOL  2
+#define BROADCAST_TTL     255
 
 class Node;
 class LinkLayer;
@@ -101,6 +104,27 @@ class NetworkLayer: public Layer
   private:
     enum class TimerType: unsigned char { SEND_ARP, SEND_LS };
 
+    struct Distance
+    {
+      unsigned long long delay;
+      unsigned           hops;
+
+      bool operator < (const Distance& other) const
+      {
+        return delay < other.delay;
+      }
+
+      Distance operator + (unsigned additionalDelay) const
+      {
+        Distance result;
+        result.delay = delay + additionalDelay + CONSTANT_WEIGTH;
+        result.hops = hops + 1;
+        return result;
+      }
+    };
+
+    typedef unordered_map<IpAddress, Distance> DistanceMap;
+
     struct Header
     {
       unsigned char  protocol;
@@ -137,10 +161,11 @@ class NetworkLayer: public Layer
 
     struct ArpCache
     {
-      MacAddress macAddress;
-      unsigned   responseTime;
-      timespec   timeout;
-      LinkLayer* pLinkLayer;
+      MacAddress  macAddress;
+      unsigned    responseTime;
+      timespec    timeout;
+      LinkLayer*  pLinkLayer;
+      DistanceMap distances;
 
       void update(MacAddress m, timespec& r, timespec& t, LinkLayer* p)
       {
@@ -154,10 +179,11 @@ class NetworkLayer: public Layer
 
     struct NodeInfo
     {
-      unsigned                syn;        // LS paketo identifikatorius
-      timespec                timeout;    // duomenų galiojimo laikas
-      vector<pair<int, int> > neighbours; // kaimynų IP, atstumai iki jų
-      unsigned                kruskalSet; // Kruskalo algoritmui
+      unsigned                           syn;        // LS paketo laikas
+      timespec                           timeout;    // duomenų galiojimo laikas
+      vector<pair<IpAddress, unsigned> > neighbours; // kaimynų IP, atstumai
+      unsigned                           kruskalSet; // Kruskalo algoritmui
+      unsigned                           lastId;     // siųsto paketo ID
 
       NodeInfo():
         syn(0),
@@ -189,9 +215,10 @@ class NetworkLayer: public Layer
     unordered_set<LinkLayer*>                              mLinks;
     long long                                              mLastTimerId;
     unordered_map<long long, pair<TimerType, LinkLayer*> > mTimers;
-    unordered_map<unsigned, ArpCache>                      mArpCache;
-    unordered_set<unsigned>                                mSpanningTree;
-    unordered_map<unsigned, NodeInfo>                      mNodes;
+    unordered_map<IpAddress, ArpCache>                     mArpCache;
+    unordered_set<IpAddress>                               mSpanningTree;
+    unordered_map<IpAddress, NodeInfo>                     mNodes;
+    unsigned                                               mLastBroadcastId;
 
   public:
     NetworkLayer(Node* pNode);
@@ -200,6 +227,7 @@ class NetworkLayer: public Layer
     void removeLink(LinkLayer* pLinkLayer);
     void fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source, Byte* packet,
                        FrameLength packetLength);
+    bool fromTransportLayer(IpAddress destination, Byte* tpdu, unsigned length);
 
   protected:
     const char* layerName()
@@ -208,7 +236,22 @@ class NetworkLayer: public Layer
   private:
     void     startTimer(int timeout, TimerType timerType, LinkLayer* pLinkLayer);
     void     kruskal();
-    unsigned kruskalSetOf(unsigned node);
+    unsigned kruskalSetOf(IpAddress node);
+    void     dijkstras();
+    void     dijkstra(IpAddress root, DistanceMap& rDistances);
+    
+    /**
+     * Parenka kelią ir išsiunčia paketą, skirtą konkrečiam mazgui.
+     * Nustato TTL lauką pagal kelio ilgį (jei kaimynas – 0, kitu atveju
+     * pusantro karto daugiau, nei parinktas kelias. Kiti tarnybiniai laukai
+     * jau turi būti nustatyti.
+     *
+     * @param rHeader paketo antraštė
+     * @param packet  paketas
+     * @param length  paketo ilgis baitais
+     * @return true, jei pavyko išsiųsti; false priešingu atveju
+     */
+    bool route(Header& rHeader, Byte* packet, unsigned length);
 };
 
 #endif

@@ -4,12 +4,14 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#include <map>
 
 #define ARP_LENGTH 1 + sizeof(timespec)
 
 NetworkLayer::NetworkLayer(Node* pNode):
   Layer(pNode),
-  mLastTimerId(0)
+  mLastTimerId(0),
+  mLastBroadcastId(0)
 {
   startTimer(LS_PERIOD, TimerType::SEND_LS, NULL);
 }
@@ -33,8 +35,8 @@ void NetworkLayer::timer(long long id)
     Byte packet[packetLength];
     Header header;
     header.protocol    = LS_PROTOCOL;
-    header.ttl         = 255;
-    header.id          = 0;
+    header.ttl         = BROADCAST_TTL;
+    header.id          = ++mLastBroadcastId;
     header.length      = packetLength - sizeof(Header);
     header.offset      = 0;
     header.source      = mpNode->ipAddress();
@@ -55,9 +57,12 @@ void NetworkLayer::timer(long long id)
       it = mArpCache.find(destinationIp);
       if (it != mArpCache.end())
       {
-        it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress, packet,
-                                                packetLength);
-        info("Išsiųstas LS į %llx.\n", it->second.macAddress);
+        if (it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                    packet, packetLength))
+        {
+          info("Išsiųstas LS į %llx.\n", it->second.macAddress);
+        }
+        else info("Nepavyko išsiųsti LS į %llx.\n", it->second.macAddress);
       }
       else
       {
@@ -74,7 +79,7 @@ void NetworkLayer::timer(long long id)
     Header header;
     header.protocol = ARP_PROTOCOL;
     header.ttl = 0;
-    header.id = 0;
+    header.id = ++mLastBroadcastId;
     header.length = ARP_LENGTH;
     header.offset = 0;
     header.source = mpNode->ipAddress();
@@ -85,9 +90,13 @@ void NetworkLayer::timer(long long id)
     timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
     memcpy(packet + sizeof(Header) + 1, &time, sizeof(timespec));
-    timerIt->second.second->fromNetworkLayer(BROADCAST_MAC, packet,
-                                             sizeof(Header) + header.length);
-    info("Išsiuntė ARP užklausą.\n");
+    if (timerIt->second.second->fromNetworkLayer(BROADCAST_MAC, packet,
+                                                 sizeof(Header)
+                                                 + header.length))
+    {
+      info("Išsiuntė ARP užklausą.\n");
+    }
+    else info("Nepavyko išsiųsti ARP užklausos.\n");
     startTimer(ARP_PERIOD, TimerType::SEND_ARP, timerIt->second.second);
   }
   mTimers.erase(timerIt);
@@ -118,12 +127,19 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
     switch (packet[sizeof(Header)])
     {
       case 0:
-        info("Gavo ARP užklausą nuo %llx.\n", source);
         packet[sizeof(Header)] = 1;
         header.destination = header.source;
         header.source = mpNode->ipAddress();
         header.toBytes(packet);
-        pLinkLayer->fromNetworkLayer(source, packet, packetLength);
+        if (pLinkLayer->fromNetworkLayer(source, packet, packetLength))
+        {
+          info("Gavo ARP užklausą nuo %llx. Išsiuntė atsakymą.\n", source);
+        }
+        else
+        {
+          info("Gavo ARP užklausą nuo %llx, bet atsakymo išsiųsti nepavyko.\n",
+               source);
+        }
         break;
       case 1:
         if (sizeof(Header) + ARP_LENGTH != packetLength)
@@ -144,8 +160,7 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
         mArpCache[header.source].update(source, responseTime, time, pLinkLayer);
         break;
       default:
-        info("Gautas paketas transporto lygiui.\n");
-        // mpNode->toTransportLayer();
+        info("Klaida: blogas pirmas ARP baitas.");
     }
     return;
   }
@@ -162,13 +177,15 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
         if (it == mArpCache.end())
         {
           info("Nerastas kaimyno %x MAC adresas.\n", ip);
-          return;
         }
-        if (it->second.macAddress != source)
+        else if (it->second.macAddress != source)
         {
-          it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress, packet,
-                                                  packetLength);
-          info("Visiems skirtas paketas persiųstas į %x.\n", ip);
+          if (it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                      packet, packetLength))
+          {
+            info("Visiems skirtas paketas persiųstas į %x.\n", ip);
+          }
+          else info("Visiems skirto paketo persiųsti į %x nepavyko.\n", ip);
         }
       }
       ++header.ttl;
@@ -182,11 +199,88 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
     {
       info("Atnaujinti mazgo %x duomenys.\n", header.source);
       kruskal();
+      dijkstras();
     }
     else
     {
       info("Gauti seni mazgo %x duomenys.\n", header.source);
     }
+  }
+  else if (header.destination == mpNode->ipAddress()
+           || header.destination == BROADCAST_IP)
+  {
+    info("Paketas nuo %x į transporto lygį.\n", header.source);
+    // TODO: defragmentavimas
+    mpNode->toTransportLayer(header.source, packet + sizeof(Header),
+                             header.length);
+    header.toBytes(packet);
+  }
+  else
+  {
+    info("Paketas skirtas kitam mazgui.\n");
+    --header.ttl;
+    route(header, packet, packetLength);
+  }
+}
+
+bool NetworkLayer::fromTransportLayer(IpAddress destination, Byte* tpdu,
+                                      unsigned length)
+{
+  info("Gautas %u ilgio paketas iš transporto lygio, adresuotas %x.\n",
+       length, destination);
+  if (destination == mpNode->ipAddress())
+  {
+    info("Gavėjas lygus siuntėjui, nesiunčiama.\n");
+    return false;
+  }
+  if (mNodes.find(destination) == mNodes.end() && destination != BROADCAST_IP)
+  {
+    info("Nežinomas adresatas.\n");
+    return false;
+  }
+  Byte packet[sizeof(Header) + length];
+  memcpy(packet + sizeof(Header), tpdu, length);
+  Header header;
+  header.protocol = TRANSPORT_PROTOCOL;
+  header.length = length;
+  header.offset = 0; // TODO: fragmentavimas
+  header.source = mpNode->ipAddress();
+  header.destination = destination;
+  if (destination == BROADCAST_IP)
+  {
+    info("Siunčia visiems.\n");
+    header.ttl = BROADCAST_TTL;
+    header.id = ++mLastBroadcastId;
+    header.toBytes(packet);
+    bool sent = false;
+    for (auto ip : mSpanningTree)
+    {
+      auto it = mArpCache.find(ip);
+      if (it == mArpCache.end()) info("Nerastas kaimyno %x MAC adresas.\n", ip);
+      else
+      {
+        if (it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                    packet,
+                                                    sizeof(Header) + length))
+        {
+          info("Visiems skirtas paketas išsiųstas į %x.\n", ip);
+          sent = true;
+        }
+        else info("Nepavyko išsiųsti į %x.\n", ip);
+      }
+    }
+    return sent;
+  }
+  else
+  {
+    auto nodeIt = mNodes.find(destination);
+    if (nodeIt != mNodes.end())
+    {
+      header.id = ++(nodeIt->second.lastId);
+      return route(header, packet, sizeof(Header) + length);
+    }
+    info("Adresato mazgas nerastas, nesiunčiama.\n");
+    return false;
   }
 }
 
@@ -202,7 +296,7 @@ void NetworkLayer::kruskal()
   timespec current;
   clock_gettime(CLOCK_MONOTONIC, &current);
   mSpanningTree.clear();
-  vector<pair<unsigned, pair<unsigned, unsigned> > > edges;
+  vector<pair<IpAddress, pair<IpAddress, unsigned> > > edges;
   for (auto it = mNodes.begin(); it != mNodes.end();)
   {
     if (it->second.timeout < current)
@@ -240,10 +334,139 @@ void NetworkLayer::kruskal()
   info("Atnaujintas minimalus jungiamasis medis (%u).\n", mSpanningTree.size());
 }
 
-unsigned NetworkLayer::kruskalSetOf(unsigned node)
+unsigned NetworkLayer::kruskalSetOf(IpAddress node)
 {
-  for (unsigned set = mNodes[node].kruskalSet;
-       set != node && set != BROADCAST_IP;
-       node = set, set = mNodes[node].kruskalSet);
+  for (unsigned kruskalSet = mNodes[node].kruskalSet;
+       kruskalSet != node && kruskalSet != BROADCAST_IP;
+       node = kruskalSet, kruskalSet = mNodes[node].kruskalSet);
   return node;
+}
+
+void NetworkLayer::dijkstras()
+{
+  for (auto& arpCache : mArpCache)
+  {
+    dijkstra(arpCache.first, arpCache.second.distances);
+  }
+}
+
+void NetworkLayer::dijkstra(IpAddress root, DistanceMap& rDistances)
+{
+  rDistances.clear();
+  NodeInfo& rRootNode = mNodes[root];
+  multimap<Distance, IpAddress> priorityQueue;
+  for (auto& rNeighbour : rRootNode.neighbours)
+  {
+    if (rNeighbour.first == mpNode->ipAddress()
+        || mArpCache.find(rNeighbour.first) != mArpCache.end()) continue;
+    Distance distance;
+    distance.delay = rNeighbour.second + CONSTANT_WEIGTH;
+    distance.hops = 1;
+    rDistances.insert(make_pair(rNeighbour.first, distance));
+    priorityQueue.insert(make_pair(distance, rNeighbour.first));
+  }
+  for (; !priorityQueue.empty(); priorityQueue.erase(priorityQueue.begin()))
+  {
+    Distance distance = rDistances.find(priorityQueue.begin()->second)->second;
+    if (distance < priorityQueue.begin()->first) continue;
+    auto& rNeighbours = mNodes[priorityQueue.begin()->second].neighbours;
+    for (auto& rNeighbour : rNeighbours)
+    {
+      if (rNeighbour.first == mpNode->ipAddress()
+          || mArpCache.find(rNeighbour.first) != mArpCache.end()) continue;
+      DistanceMap::iterator it = rDistances.find(rNeighbour.first);
+      if (it == rDistances.end())
+      {
+        rDistances.insert(make_pair(rNeighbour.first,
+                                    distance + rNeighbour.second));
+      }
+      else if (distance + rNeighbour.second < it->second)
+      {
+        it->second = distance + rNeighbour.second;
+        priorityQueue.insert(make_pair(it->second, rNeighbour.first));
+      }
+    }
+  }
+}
+
+bool NetworkLayer::route(Header& rHeader, Byte* packet, unsigned length)
+{
+  auto it = mArpCache.find(rHeader.destination);
+  if (it != mArpCache.end())
+  {
+    info("Siunčia tiesiogiai.\n");
+    rHeader.ttl = 0;
+    rHeader.toBytes(packet);
+    if (!it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                 packet,
+                                                 length))
+    {
+      info("Išsiųsti nepavyko.\n");
+      return false;
+    }
+    return true;
+  }
+  else
+  {
+    auto nodeIt = mNodes.find(rHeader.destination);
+    if (nodeIt != mNodes.end())
+    {
+      vector<pair<IpAddress, Distance> > ipDistance;
+      unsigned long long maxDistance = 0;
+      for (auto& arpCache : mArpCache)
+      {
+        auto distanceIt = arpCache.second.distances.find(rHeader.destination);
+        if (distanceIt != arpCache.second.distances.end())
+        {
+          Distance distance = distanceIt->second
+                              + arpCache.second.responseTime;
+          ipDistance.push_back(make_pair(arpCache.first, distance));
+          if (maxDistance < distance.delay) maxDistance = distance.delay;
+        }
+      }
+      if (ipDistance.empty())
+      {
+        info("Atrodo, nebėra kelio į adresato mazgą, paketas neišsiųstas.\n");
+        return false;
+      }
+      if (maxDistance == 0)
+      {
+        info("Klaida: didžiausias atstumas yra 0.\n");
+        return false;
+      }
+      vector<double> weights;
+      double totalWeight = 0;
+      for (auto& ipDist : ipDistance)
+      {
+        totalWeight += ipDist.second.delay / double(maxDistance);
+        weights.push_back(totalWeight);
+      }
+      unsigned selected = lower_bound(weights.begin(), weights.end(),
+                                      totalWeight
+                                      * (double(rand()) / RAND_MAX))
+                          - weights.begin();
+      if (selected >= ipDistance.size())
+      {
+        info("Klaida pasirenkant maršrutą.\n");
+        return false;
+      }
+      info("Pasirinko %x (#%u iš %u galimų).\n", ipDistance[selected].first,
+                                                 selected, weights.size());
+      rHeader.ttl = ipDistance[selected].second.hops * 3 / 2;
+      rHeader.toBytes(packet);
+      ArpCache& rArpCache = (mArpCache.find(ipDistance[selected].first))->second;
+      if (!rArpCache.pLinkLayer->fromNetworkLayer(rArpCache.macAddress,
+                                                  packet, length))
+      {
+        info("Išsiųsti nepavyko.\n");
+        return false;
+      }
+      return true;
+    }
+    else
+    {
+      info("Nerastas kelias į adresato mazgą, paketas neišsiųstas.\n");
+      return false;
+    }
+  }
 }

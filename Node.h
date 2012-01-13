@@ -87,6 +87,10 @@ class Node
     void toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
                      Frame& rFrame);
 
+    void toNetworkLayer(IpAddress destination, Byte* tpdu, unsigned length);
+
+    void toTransportLayer(IpAddress source, Byte* tpdu, unsigned length);
+
   private:
     /**
      * Atjungia nuo laido.
