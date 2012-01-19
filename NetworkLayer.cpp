@@ -209,11 +209,37 @@ void NetworkLayer::fromLinkLayer(LinkLayer* pLinkLayer, MacAddress source,
   else if (header.destination == mpNode->ipAddress()
            || header.destination == BROADCAST_IP)
   {
-    info("Paketas nuo %x į transporto lygį.\n", header.source);
-    // TODO: defragmentavimas
-    mpNode->toTransportLayer(header.source, packet + sizeof(Header),
-                             header.length);
-    header.toBytes(packet);
+    if (header.length + sizeof(Header) == packetLength)
+    {
+      mpNode->toTransportLayer(header.source, packet + sizeof(Header),
+                               header.length);
+    }
+    else
+    {
+      info("Gautas %hu ilgio paketo fragmentas [%hu; %hu).\n", header.length,
+           header.offset, header.offset + packetLength - sizeof(Header));
+      auto it = mFragments.find(make_pair(header.source, header.id));
+      if (it == mFragments.end())
+      {
+        mFragments.insert(make_pair(make_pair(header.source, header.id),
+                                    new Fragment(header.length,
+                                             packet + sizeof(Header),
+                                             header.offset,
+                                             packetLength - sizeof(Header))));
+      }
+      else
+      {
+        it->second->add(header.length, packet + sizeof(Header), header.offset,
+                        packetLength - sizeof(Header));
+        if (it->second->isComplete())
+        {
+          mpNode->toTransportLayer(header.source, it->second->data(),
+                                   header.length);
+          delete it->second;
+          mFragments.erase(it);
+        }
+      }
+    }
   }
   else
   {
@@ -239,11 +265,12 @@ bool NetworkLayer::fromTransportLayer(IpAddress destination, Byte* tpdu,
     return false;
   }
   Byte packet[sizeof(Header) + length];
+  Byte* pPacket = packet;
   memcpy(packet + sizeof(Header), tpdu, length);
   Header header;
   header.protocol = TRANSPORT_PROTOCOL;
   header.length = length;
-  header.offset = 0; // TODO: fragmentavimas
+  header.offset = 0;
   header.source = mpNode->ipAddress();
   header.destination = destination;
   if (destination == BROADCAST_IP)
@@ -253,22 +280,33 @@ bool NetworkLayer::fromTransportLayer(IpAddress destination, Byte* tpdu,
     header.id = ++mLastBroadcastId;
     header.toBytes(packet);
     bool sent = false;
-    for (auto ip : mSpanningTree)
+    do
     {
-      auto it = mArpCache.find(ip);
-      if (it == mArpCache.end()) info("Nerastas kaimyno %x MAC adresas.\n", ip);
-      else
+      info("offset = %hu\n", header.offset);
+      unsigned currentLength = min(MAX_PACKET_SIZE,
+                                   length + unsigned(sizeof(Header)));
+      header.toBytes(pPacket);
+      for (auto ip : mSpanningTree)
       {
-        if (it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
-                                                    packet,
-                                                    sizeof(Header) + length))
+        auto it = mArpCache.find(ip);
+        if (it == mArpCache.end()) info("Nerastas kaimyno %x MAC adresas.\n", ip);
+        else
         {
-          info("Visiems skirtas paketas išsiųstas į %x.\n", ip);
-          sent = true;
+          if (it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                      pPacket,
+                                                      currentLength))
+          {
+            info("Visiems skirtas paketas išsiųstas į %x.\n", ip);
+            sent = true;
+          }
+          else info("Nepavyko išsiųsti į %x.\n", ip);
         }
-        else info("Nepavyko išsiųsti į %x.\n", ip);
       }
+      pPacket += currentLength - sizeof(Header);
+      header.offset += currentLength - sizeof(Header);
+      length -= currentLength - sizeof(Header);
     }
+    while (length);
     return sent;
   }
   else
@@ -391,59 +429,68 @@ void NetworkLayer::dijkstra(IpAddress root, DistanceMap& rDistances)
 
 bool NetworkLayer::route(Header& rHeader, Byte* packet, unsigned length)
 {
+  vector<pair<IpAddress, Distance> > ipDistance;
+  vector<double> weights;
+  double totalWeight = 0;
   auto it = mArpCache.find(rHeader.destination);
-  if (it != mArpCache.end())
+  if (it == mArpCache.end())
   {
-    info("Siunčia tiesiogiai.\n");
-    rHeader.ttl = 0;
-    rHeader.toBytes(packet);
-    if (!it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
-                                                 packet,
-                                                 length))
+    if (mNodes.find(rHeader.destination) == mNodes.end())
     {
-      info("Išsiųsti nepavyko.\n");
+      info("Nerastas kelias į adresato mazgą, paketas neišsiųstas.\n");
       return false;
     }
-    return true;
+    unsigned long long maxDistance = 0;
+    for (auto& arpCache : mArpCache)
+    {
+      auto distanceIt = arpCache.second.distances.find(rHeader.destination);
+      if (distanceIt != arpCache.second.distances.end())
+      {
+        Distance distance = distanceIt->second + arpCache.second.responseTime;
+        ipDistance.push_back(make_pair(arpCache.first, distance));
+        if (maxDistance < distance.delay) maxDistance = distance.delay;
+      }
+    }
+    if (ipDistance.empty())
+    {
+      info("Atrodo, nebėra kelio į adresato mazgą, paketas neišsiųstas.\n");
+      return false;
+    }
+    if (maxDistance == 0)
+    {
+      info("Klaida: didžiausias atstumas yra 0.\n");
+      return false;
+    }
+    for (auto& ipDist : ipDistance)
+    {
+      totalWeight += ipDist.second.delay / double(maxDistance);
+      weights.push_back(totalWeight);
+    }
   }
   else
   {
-    auto nodeIt = mNodes.find(rHeader.destination);
-    if (nodeIt != mNodes.end())
+    info("Siunčia tiesiogiai.\n");
+    rHeader.ttl = 0;
+  }
+  do
+  {
+    info("offset = %hu\n", rHeader.offset);
+    unsigned currentLength = min(MAX_PACKET_SIZE, length);
+    rHeader.toBytes(packet);
+    if (it != mArpCache.end())
     {
-      vector<pair<IpAddress, Distance> > ipDistance;
-      unsigned long long maxDistance = 0;
-      for (auto& arpCache : mArpCache)
+      if (!it->second.pLinkLayer->fromNetworkLayer(it->second.macAddress,
+                                                   packet,
+                                                   currentLength))
       {
-        auto distanceIt = arpCache.second.distances.find(rHeader.destination);
-        if (distanceIt != arpCache.second.distances.end())
-        {
-          Distance distance = distanceIt->second
-                              + arpCache.second.responseTime;
-          ipDistance.push_back(make_pair(arpCache.first, distance));
-          if (maxDistance < distance.delay) maxDistance = distance.delay;
-        }
-      }
-      if (ipDistance.empty())
-      {
-        info("Atrodo, nebėra kelio į adresato mazgą, paketas neišsiųstas.\n");
+        info("Išsiųsti nepavyko.\n");
         return false;
       }
-      if (maxDistance == 0)
-      {
-        info("Klaida: didžiausias atstumas yra 0.\n");
-        return false;
-      }
-      vector<double> weights;
-      double totalWeight = 0;
-      for (auto& ipDist : ipDistance)
-      {
-        totalWeight += ipDist.second.delay / double(maxDistance);
-        weights.push_back(totalWeight);
-      }
+    }
+    else
+    {
       unsigned selected = lower_bound(weights.begin(), weights.end(),
-                                      totalWeight
-                                      * (double(rand()) / RAND_MAX))
+                                      totalWeight * (double(rand()) / RAND_MAX))
                           - weights.begin();
       if (selected >= ipDistance.size())
       {
@@ -461,12 +508,11 @@ bool NetworkLayer::route(Header& rHeader, Byte* packet, unsigned length)
         info("Išsiųsti nepavyko.\n");
         return false;
       }
-      return true;
     }
-    else
-    {
-      info("Nerastas kelias į adresato mazgą, paketas neišsiųstas.\n");
-      return false;
-    }
+    packet += currentLength - sizeof(Header);
+    rHeader.offset += currentLength - sizeof(Header);
+    length -= currentLength - sizeof(Header);
   }
+  while (length > sizeof(Header));
+  return true;
 }

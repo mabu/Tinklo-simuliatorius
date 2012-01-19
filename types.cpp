@@ -25,8 +25,8 @@ unsigned short bytes_to_short(Byte* bytes)
 
 void short_to_bytes(Byte* bytes, unsigned short num)
 {
-  bytes[0] = num & 0xff00;
-  bytes[1] = num & 0x00ff;
+  bytes[0] = (num & 0xff00) >> 8;
+  bytes[1] =  num & 0x00ff;
 }
 
 bool operator < (const timespec& a, const timespec& b)

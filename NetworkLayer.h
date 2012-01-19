@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "types.h"
 #include "Layer.h"
+#include "Fragment.h"
 
 #define ARP_PROTOCOL        0
 #define ARP_STARTED      5000
@@ -14,7 +15,7 @@
 #define LS_PERIOD       20000
 #define LS_TIMEOUT     500000
 #define PACKET_TIMEOUT 500000
-#define MAX_FRAME_SIZE   1499
+#define MAX_PACKET_SIZE    99U
 #define CONSTANT_WEIGTH  1000
 #define TRANSPORT_PROTOCOL  2
 #define BROADCAST_TTL     255
@@ -22,6 +23,18 @@
 class Node;
 class LinkLayer;
 
+namespace std
+{
+  template<>
+  struct hash<pair<IpAddress, unsigned short> >
+  {
+    size_t operator()(pair<IpAddress, unsigned short> x) const throw()
+    {
+      return hash<long long>()(((long long)(x.first) << sizeof(unsigned short))
+                               + x.second);
+    }
+  };
+}
 /**
  * Tinklo polygis.
  *
@@ -212,13 +225,14 @@ class NetworkLayer: public Layer
     };
 
   private:
-    unordered_set<LinkLayer*>                              mLinks;
-    long long                                              mLastTimerId;
-    unordered_map<long long, pair<TimerType, LinkLayer*> > mTimers;
-    unordered_map<IpAddress, ArpCache>                     mArpCache;
-    unordered_set<IpAddress>                               mSpanningTree;
-    unordered_map<IpAddress, NodeInfo>                     mNodes;
-    unsigned                                               mLastBroadcastId;
+    unordered_set<LinkLayer*>                                 mLinks;
+    long long                                                 mLastTimerId;
+    unordered_map<long long, pair<TimerType, LinkLayer*> >    mTimers;
+    unordered_map<IpAddress, ArpCache>                        mArpCache;
+    unordered_set<IpAddress>                                  mSpanningTree;
+    unordered_map<IpAddress, NodeInfo>                        mNodes;
+    unsigned                                                  mLastBroadcastId;
+    unordered_map<pair<IpAddress, unsigned short>, Fragment*> mFragments;
 
   public:
     NetworkLayer(Node* pNode);

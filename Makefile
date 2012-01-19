@@ -6,6 +6,7 @@ SOURCES=common.cpp         \
         NetworkLayer.cpp   \
         Node.cpp           \
         TransportLayer.cpp \
+        Fragment.cpp       \
         types.cpp          \
 
 OBJECTS=$(SOURCES:.cpp=.o)

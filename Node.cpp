@@ -159,7 +159,8 @@ void Node::run()
         else
         {
           printf("Siunčiama į tinklo lygį.\n");
-          mNetworkLayer.fromTransportLayer(ntohl(ip), NULL, 0);
+          Byte uninit[128];
+          mNetworkLayer.fromTransportLayer(ntohl(ip), uninit, 128);
         }
       }
     }

@@ -123,8 +123,8 @@ bool MacSublayer::sendBuffer()
 {
   if (mTimersRunning > 0)
   {
-    info("Vyksta gavimas (%lld) – kad nebūtų kolizijos, neleista siųsti.\n",
-         mTimersRunning);
+    info("Vyksta gavimas (%lld; %u) – kad nebūtų kolizijos, neleista siųsti.\n",
+         mTimersRunning, mInputBuffer.size());
     return false;
   }
   if (!sendPreamble()) return false;
