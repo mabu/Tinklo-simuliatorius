@@ -12,19 +12,22 @@ SOURCES=common.cpp         \
 OBJECTS=$(SOURCES:.cpp=.o)
 HEADERS=$(SOURCES:.cpp=.h) Frame.h
 
-all: wire node
+all: wire node app
 
-wire: wire.o common.o
-	g++ -o wire $(FLAGS) wire.o common.o
+wire: common.o wire.cpp
+	g++ -o wire $(FLAGS) wire.cpp common.o
 
-wire.o: wire.cpp common.o
-	g++ -c $(FLAGS) wire.cpp
+common.o: common.cpp
+	g++ -c $(FALGS) common.cpp
 
 node: $(OBJECTS) node.cpp
 	g++ -o node $(FLAGS) node.cpp $(OBJECTS) -lrt
+
+app: transport_service.o types.o app.cpp
+	g++ -o app $(FLAGS) app.cpp transport_service.o types.o
 
 %.o: %.cpp $(HEADERS)
 	g++ -c $(FLAGS) $*.cpp
 
 clean:
-	rm -f wire node *.o
+	rm -f wire node app *.o

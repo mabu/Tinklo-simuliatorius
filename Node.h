@@ -4,6 +4,7 @@
 #include <cstdarg>
 #include <ctime>
 #include <vector>
+#include <set>
 #include <map>
 #include <unordered_map>
 #include <sys/select.h>
@@ -26,7 +27,7 @@ class Node
     TransportLayer                               mTransportLayer;
     map<int, MacSublayer*>                       mSocketToMacSublayer;
     unordered_map<MacSublayer*, int>             mMacSublayerToSocket;
-    map<int, int>                                mSocketToApp;
+    set<int>                                     mAppSockets;
     unordered_map<int, int>                      mAppToSocket;
     unordered_map<MacSublayer*, LinkLayer*>      mMacToLink;
     fd_set                                       mFdSet;
@@ -90,6 +91,13 @@ class Node
     void toNetworkLayer(IpAddress destination, Byte* tpdu, unsigned length);
 
     void toTransportLayer(IpAddress source, Byte* tpdu, unsigned length);
+
+    /**
+     * Iškviečiama atsijungus programai.
+     *
+     * @param appSocket jungtis į atsijungusią programą
+     */
+    void removeApp(int appSocket);
 
   private:
     /**

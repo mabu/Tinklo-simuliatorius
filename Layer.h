@@ -1,5 +1,8 @@
 #ifndef LAYER_H
 #define LAYER_H
+
+#include "types.h"
+
 /**
  * Bendra klasė tinklo steko lygiams.
  */

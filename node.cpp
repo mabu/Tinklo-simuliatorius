@@ -70,8 +70,8 @@ int create_listening_socket(char* name)
   sockaddr_un addr;
   addr.sun_family = AF_UNIX;
   strcpy(addr.sun_path, name);
-  if (0 != bind(sock, (sockaddr*)&addr,
-                strlen(addr.sun_path) + sizeof(addr.sun_family)))
+  if (0 != ::bind(sock, (sockaddr*)&addr,
+                  strlen(addr.sun_path) + sizeof(addr.sun_family)))
   {
     close(sock);
     return -1;

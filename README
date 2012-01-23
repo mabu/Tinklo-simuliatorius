@@ -1,0 +1,2 @@
+Kadangi laidais keliauja daug duomenų (1 baito persiuntimui vidutiniškai daugiau nei 16 baitų), gali greitai užsipildyti laidų siuntimo buferiai, dėl ko labai padaugėja kadrų atmetimų (mazgas nespėja apdoroti kurios nors dalies ir turi visą kadrą išmesti). To galima išvengti padidinus buferių limitą, pavyzdžiui, iki 10MB. wire.cpp tai jau yra padaryta, tačiau reikėtų pasirūpinti ir kad OS leidžiamas viršutinis limitas būtų pakankamas:
+# echo 'net.core.wmem_max=10000000' >> /etc/sysctl.conf

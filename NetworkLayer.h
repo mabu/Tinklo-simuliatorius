@@ -3,9 +3,9 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
-#include "types.h"
 #include "Layer.h"
 #include "Fragment.h"
+#include "hashes.h"
 
 #define ARP_PROTOCOL        0
 #define ARP_STARTED      5000
@@ -23,18 +23,6 @@
 class Node;
 class LinkLayer;
 
-namespace std
-{
-  template<>
-  struct hash<pair<IpAddress, unsigned short> >
-  {
-    size_t operator()(pair<IpAddress, unsigned short> x) const throw()
-    {
-      return hash<long long>()(((long long)(x.first) << sizeof(unsigned short))
-                               + x.second);
-    }
-  };
-}
 /**
  * Tinklo polygis.
  *

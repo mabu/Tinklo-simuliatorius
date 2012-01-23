@@ -30,10 +30,9 @@ Node::~Node()
   {
     if (-1 == close(it->first)) perror("Klaida atsijungiant nuo laido");
   }
-  for (auto it = mSocketToApp.begin();
-       it != mSocketToApp.end(); it++)
+  for (auto it = mAppSockets.begin(); it != mAppSockets.end(); it++)
   {
-    if (-1 == close(it->first)) perror("Klaida atsijungiant nuo programos");
+    if (-1 == close(*it)) perror("Klaida atsijungiant nuo programos");
   }
 }
 
@@ -75,10 +74,10 @@ void Node::run()
       moreThanMaxSocket = max(moreThanMaxSocket,
                               mSocketToMacSublayer.rbegin()->first + 1);
     }
-    if (false == mSocketToApp.empty())
+    if (false == mAppSockets.empty())
     {
       moreThanMaxSocket = max(moreThanMaxSocket,
-                              mSocketToApp.rbegin()->first + 1);
+                              *mAppSockets.rbegin() + 1);
     }
     fd_set tempFdSet = mFdSet;
     timespec timeout;
@@ -109,8 +108,8 @@ void Node::run()
       {
         char voltage;
         int bytesReceived = recv(it->first, &voltage, 1, 0);
-        if (bytesReceived == 1) (it++)->second->fromPhysicalLayer(voltage);
-        else if (bytesReceived == 0)
+        if (1 == bytesReceived) (it++)->second->fromPhysicalLayer(voltage);
+        else if (0 == bytesReceived)
         {
           auto old = it++;
           removeLink(old->first, old->second);
@@ -118,6 +117,23 @@ void Node::run()
         else
         {
           perror("Klaida priimant signalą iš laido");
+          break;
+        }
+      }
+      else ++it;
+    }
+
+    for (auto it = mAppSockets.begin(); it != mAppSockets.end();)
+    {
+      if (FD_ISSET(*it, &tempFdSet))
+      {
+        unsigned char action;
+        int bytesReceived = recv(*it, &action, 1, 0);
+        if (1 == bytesReceived) mTransportLayer.appAction(*(it++), action);
+        else if (0 == bytesReceived) removeApp(*(it++));
+        else
+        {
+          perror("Klaida priimant signalą iš programos");
           break;
         }
       }
@@ -140,9 +156,22 @@ void Node::run()
       mSocketToMacSublayer.insert(make_pair(wireSocket, pMacSublayer));
       mMacSublayerToSocket.insert(make_pair(pMacSublayer, wireSocket));
       mNetworkLayer.addLink(pLinkLayer);
-      FD_SET(wireSocket,  &mFdSet);
+      FD_SET(wireSocket, &mFdSet);
     }
-//    if (FD_ISSET(mAppSocket,  &tempFdSet))
+
+    if (FD_ISSET(mAppSocket,  &tempFdSet))
+    { // prisijungė programa
+      printf("Prisijungė programa.\n");
+      int appSocket = accept(mAppSocket, NULL, NULL);
+      if (-1 == appSocket)
+      {
+        perror("Klaida prijungiant programą");
+        break;
+      }
+      mTransportLayer.addApp(appSocket);
+      mAppSockets.insert(appSocket);
+      FD_SET(appSocket, &mFdSet);
+    }
 
     if (FD_ISSET(0, &tempFdSet))
     {
@@ -217,27 +246,42 @@ void Node::toLinkLayer(MacSublayer* pMacSublayer, MacAddress source,
   mMacToLink.find(pMacSublayer)->second->fromMacSublayer(source, rFrame);
 }
 
+void Node::toNetworkLayer(IpAddress destination, Byte* tpdu, unsigned length)
+{
+  mNetworkLayer.fromTransportLayer(destination, tpdu, length);
+}
+
 void Node::toTransportLayer(IpAddress source, Byte* tpdu, unsigned length)
 {
-  printf("Transporto lygiui %d ilgio paketas.\n", length);
-  // TODO
+  mTransportLayer.fromNetworkLayer(source, tpdu, length);
+}
+
+void Node::removeApp(int appSocket)
+{
+  printf("Atsijungė programa (%d).\n", appSocket);
+  if (-1 == close(appSocket)) perror("Klaida atsijungiant nuo programos");
+  if (1 == mAppSockets.erase(appSocket))
+  {
+    mTransportLayer.removeApp(appSocket);
+    FD_CLR(appSocket,  &mFdSet);
+  }
+  else printf("Jau buvo atsijungta nuo programos.\n");
 }
 
 void Node::removeLink(int wireSocket, MacSublayer* pMacSublayer)
 {
-  printf("Atsijungė laidas.\n");
+  printf("Atsijungė laidas (%d).\n", wireSocket);
   if (-1 == close(wireSocket)) perror("Klaida atsijungiant nuo laido");
   auto it = mMacToLink.find(pMacSublayer);
-  if (it == mMacToLink.end())
+  if (it != mMacToLink.end())
   {
-    printf("Jau buvo atsijungta.\n");
-    return;
+    mNetworkLayer.removeLink(it->second);
+    mMacSublayerToSocket.erase(pMacSublayer);
+    mSocketToMacSublayer.erase(wireSocket);
+    pMacSublayer->selfDestruct();
+    it->second->selfDestruct();
+    mMacToLink.erase(it);
+    FD_CLR(wireSocket,  &mFdSet);
   }
-  mNetworkLayer.removeLink(it->second);
-  mMacSublayerToSocket.erase(pMacSublayer);
-  mSocketToMacSublayer.erase(wireSocket);
-  pMacSublayer->selfDestruct();
-  it->second->selfDestruct();
-  mMacToLink.erase(it);
-  FD_CLR(wireSocket,  &mFdSet);
+  else printf("Jau buvo atsijungta nuo laido.\n");
 }

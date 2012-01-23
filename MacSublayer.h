@@ -2,7 +2,6 @@
 #define MACSUBLAYER_H
 
 #include <vector>
-#include "types.h"
 #include "Layer.h"
 #include "Frame.h"
 

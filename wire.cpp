@@ -61,8 +61,8 @@ bool connect_node(char* node)
   sockaddr_un addr;
   addr.sun_family = AF_UNIX;
   strcpy(addr.sun_path, node);
-  if (connect(nodeSocket, (sockaddr*)&addr,
-      strlen(addr.sun_path) + sizeof(addr.sun_family)) == -1)
+  if (-1 == connect(nodeSocket, (sockaddr*)&addr,
+                    strlen(addr.sun_path) + sizeof(addr.sun_family)))
   {
     close(nodeSocket);
     return false;

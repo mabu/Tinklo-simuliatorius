@@ -1,6 +1,5 @@
 #ifndef LINKLAYER_H
 #define LINKLAYER_H
-#include "types.h"
 #include "Layer.h"
 #include "Frame.h"
 #include <unordered_map>
